@@ -1,0 +1,2124 @@
+---
+title: "Propensity of email engagement and prosensity to churn models"
+author: "Giulia Chiaretti (800928), Federica Fiorentini (807124), Alberto Monaco (803669"
+output:
+  pdf_document:
+    latex_engine: xelatex
+  word_document: default
+  html_document: default
+---
+
+
+Questo progetto consiste nell'applicazione di algoritmi di Machine Learning nei seguenti due modelli di business:
+*Propensity of email engagement*
+*Propensity to churn* 
+
+In generale, l'obiettivo dei propensity modelling è quello di analizzare il comportamento dei clienti selenzionando quelli che, con un'alta probabilità, potrebbero commettere una certa azione nel futuro.
+
+Il primo modello, propensity of email engagement, va ad indagare quanto una campagna marketing basata sull'invio di email riesca a "raggiungere" i clienti, e quindi ad essere efficace. 
+
+Il propensity to churn model, invece, ha l'obiettivo di prevedere quali consumatori cesseranno di essere clienti dell'azienda, i cosiddetti churner.
+
+Entrambi i modelli consistono in problemi di classificazione binaria e, per ognuno di essi, sono stati sviluppati diversi algoritmi di Machine Learning (ed in particolare di Supervised Learning) a seguito di un'approfondita analisi dei dati a disposizione.
+
+I diversi algoritmi sono stati tunati al fine di scegliere il parametro migliore per ognuno di essi e, infine, sono stati confrontati per valutarne la performance.
+
+
+
+# PROPENSITY OF EMAIL ENGAGEMENT MODEL
+
+**Business question**
+ 
+Il fulcro dei propensity of email engagement models è prevedere se un cliente risponderà prontamente ad una specifica azione di marketing. Lo studio va, perciò, ad indagare se le email  inviate dalla compagnia riescano a raggiungere e coinvolgere i clienti in maniera mirata. L'obiettivo finale è quello di verificare l'efficacia della campagna marketing effettuata per capire se è uno strumento valido di customer engagement o se deve subire modifiche e miglioramenti.
+
+Per svolgere questo tipo di problema è stato impostato un modello di classificazione in cui la variabile target si presenta come un attributo binario che indica se il cliente ha aperto o meno l'email in una finestra temporale pari a due giorni dall'invio della stesa.
+
+
+### DATA CLEANING AND PREPARATION
+
+Di seguito viene riportata una consistente fase di preprocessing in cui vengono create le seguenti variabili esplicative:
+
+- ID_EVENT_S: id del feedback
+- NUM_SEND_PREV: variabile numerica che indica il numero di mail precedentemente inviate al cliente;
+- NUM_OPEN_PREV: variabile numerica che indica il numero di email aperte dal cliente in passato;
+- NUM_CLICK_PREV: variabile numerica che indica il numero di email clickate dal cliente in passato;
+- NUM_FAIL_PREV: variabile numerica che indica il numero di email che non sono state aperte dal cliente in passato, volontariamente o a causa di errori;
+- OPEN_RATE_PREV: variabile numerica che indica la percentuale di email aperte dal cliente in passato sul totale delle mail ricevute;
+- CLICK_RATE_PREV: variabile numerica che indica la percentuale di email clickate dal cliente in passato sul totale delle mail ricevute;
+- W_SEND_PREV: variabile booleana che indica se in passato il cliente ha ricevuto altre email dello stesso tipo;
+- W_FAIL_PREV: variabile booleana che indica se in passato il cliente ha rimbalzato o non ha ricevuto a causa di errori altre email dello stesso tipo;
+- SEND_WEEKDAY: variabile categorica che indica il giorno della settimana in cui è stata inviata l'email;
+- ID_NEG: id dello store di riferimento;
+- TYP_CLI_FID: variabile booleana che indica che se l'account del cliente è quello principale o meno;
+- COD_FID: variabile categorica che indica il tipo del programma fedeltà del cliente (standard, premium, etc.);
+- STATUS_FID: variabile booleana che indica se l'account è attivo o meno;
+- NUM_FIDs: variabile numerica che indica il numero di fidelity programs del cliente;
+- AGE_FID: variabile numerica che indica da quanti giorni è attivo il programma fedeltà del cliente;
+- W_PHONE: variabile booleana che indica se il cliente ha inserito o meno il numero di telefonoM
+- TYP_CLI_ACCOUNT: variabile categorica che indica il tipo di account del cliente;
+- TYP_JOB: variabile categorica che indica il lavoro del cliente;
+- EMAIL_PROVIDER_CLEAN: variabile categorica che indica l'email provider del cliente (clean è dovuto al fatto che gli email providers che avevano una frequenza minore sono stati raggruppati in "others");
+- PRV: variabile categorica che indica la provincia di residenza del cliente;
+- REGION: variabile categorica che indica la regione di residenza del cliente; 
+- FLAG_PRIVACY_1: variabile booleana che indica se il cliente ha dato il consenso alla privacy;
+- FLAG_PRIVACY_2: variabile booleana che indica se il cliente ha dato il consenso al profiling;
+- FLAG_PRIVACY_MKT variabile booleana che indica se il cliente ha dato il consenso al direct marketing.
+
+
+
+```{r, warning=FALSE}
+#### LIBRARIES ####
+library(dplyr)
+library(magrittr)
+library(ggplot2)
+library(forcats)
+library(grid)
+library(gridExtra)
+
+data_path <- "Laboratorio/"
+```
+
+```{r}
+
+### clients fidelity subscriptions 
+df_1_cli_fid <- read.csv2(paste0(data_path, "raw_1_cli_fid.csv"), na.strings = c("NA", ""))
+
+# clients accounts details
+df_2_cli_account <- read.csv2(paste0(data_path, "raw_2_cli_account.csv"), na.strings = c("NA", ""))
+
+### clients addresses ###
+df_3_cli_address <- read.csv2(paste0(data_path,"raw_3_cli_address.csv"), na.strings = c(""), stringsAsFactors = F)
+
+### clients privacy ###
+df_4_cli_privacy <- read.csv2(paste0(data_path,"raw_4_cli_privacy.csv"), na.strings = c("NA", ""))
+
+### email campaign characterization ###
+df_5_camp_cat <- read.csv2(paste0(data_path,"raw_5_camp_cat.csv") , na.strings = c("NA", ""))
+
+### email event ###
+df_6_camp_event <- read.csv2(paste0(data_path,"raw_6_camp_event.csv") , na.strings = c("NA", ""))
+
+df_7_tic <- read.csv2(paste0(data_path,"raw_7_tic.csv") , na.strings = c("NA", ""))
+```
+
+
+### df_1_cli_fid ###
+
+DATA CLEANING 
+ 
+```{r}
+
+str(df_1_cli_fid)
+summary(df_1_cli_fid)
+
+## cleaning dataset 1##
+df_1_cli_fid_clean <- df_1_cli_fid
+  
+
+## formatting la data e le numerical categories as factor ##
+df_1_cli_fid_clean <- df_1_cli_fid_clean %>%
+  mutate(DT_ACTIVE = as.Date(DT_ACTIVE)) %>%
+  mutate(ID_NEG = as.factor(ID_NEG)) %>%
+  mutate(TYP_CLI_FID = as.factor(TYP_CLI_FID)) %>%
+  mutate(STATUS_FID = as.factor(STATUS_FID))
+
+## (consistency control) number of fid per client ##  
+#per ogni cliente ho il numero di fidelity program e di date active che è la data in cui lo ha attivato.
+#ad esempio ci sono clienti che in una sola data hanno attivato 3 programmi fedeltà.
+num_fid_x_cli <- df_1_cli_fid_clean %>%
+  group_by(ID_CLI) %>%       
+  summarize(NUM_FIDs =  n_distinct(ID_FID), NUM_DATEs = n_distinct(DT_ACTIVE))
+#impostiamo quindi una tabella riassuntiva:
+dist_num_fid_x_cli <- num_fid_x_cli %>%
+  group_by(NUM_FIDs, NUM_DATEs) %>%
+  summarize(TOT_CLIs = n_distinct(ID_CLI))
+```
+
+```{r}
+#closer look sui clienti con più di un programma fedeltà
+num_fid_x_cli %>% filter(NUM_DATEs == 3)
+```
+
+```{r}
+df_1_cli_fid %>% filter(ID_CLI == 621814)
+```
+
+```{r}
+
+## keep both first fid and last fid ##
+# first --> registration date
+# last --> features
+df_1_cli_fid_first <- df_1_cli_fid_clean %>%
+  group_by(ID_CLI) %>%
+  filter(DT_ACTIVE == min(DT_ACTIVE)) %>%
+  arrange(ID_FID) %>%
+  filter(row_number() == 1) %>%
+  ungroup() %>%
+  as.data.frame()
+```
+
+```{r}
+df_1_cli_fid_last <- df_1_cli_fid_clean %>%
+  group_by(ID_CLI) %>%
+  filter(DT_ACTIVE == max(DT_ACTIVE)) %>%
+  arrange(desc(ID_FID)) %>%
+  filter(row_number() == 1) %>%
+  ungroup() %>%
+  as.data.frame()
+```
+
+```{r}
+df_1_cli_fid_clean <- df_1_cli_fid_last %>%
+  left_join(df_1_cli_fid_first %>%
+              dplyr::select(c(ID_CLI, FIRST_ID_NEG = ID_NEG, FIRST_DT_ACTIVE = DT_ACTIVE))
+            , by = 'ID_CLI') %>%
+  left_join(num_fid_x_cli %>%
+              dplyr::select(c(ID_CLI, NUM_FIDs)) %>%
+              mutate(NUM_FIDs = as.factor(NUM_FIDs))
+            , by = 'ID_CLI')
+
+```
+
+```{r}
+## lets review ##
+str(df_1_cli_fid_clean)
+summary(df_1_cli_fid_clean)
+```
+
+```{r}
+## explore distributions ##
+
+# COD_FID
+df_1_cli_fid_clean %>%
+  group_by(COD_FID) %>%
+  summarize(TOT_CLIs = n_distinct(ID_CLI)) %>%
+  mutate(PERCENT = TOT_CLIs/sum(TOT_CLIs)) %>%
+  arrange(desc(PERCENT))
+
+ggplot(df_1_cli_fid_clean, aes(x=COD_FID)) + geom_bar()
+
+# TYP_CLI_FID
+df_1_cli_fid_clean %>%
+  group_by(TYP_CLI_FID) %>%
+  summarize(TOT_CLIs = n_distinct(ID_CLI)) %>%
+  mutate(PERCENT = TOT_CLIs/sum(TOT_CLIs)) %>%
+  arrange(desc(PERCENT))
+
+ggplot(df_1_cli_fid_clean, aes(x=TYP_CLI_FID)) + geom_bar()
+
+# STATUS_FID
+df_1_cli_fid_clean %>%
+  group_by(STATUS_FID) %>%
+  summarize(TOT_CLIs = n_distinct(ID_CLI)) %>%
+  mutate(PERCENT = TOT_CLIs/sum(TOT_CLIs)) %>%
+  arrange(desc(PERCENT))
+
+ggplot(df_1_cli_fid_clean, aes(x=STATUS_FID)) + geom_bar()
+
+# ID_NEG
+df_1_cli_fid_clean %>%
+  group_by(ID_NEG) %>%
+  summarize(TOT_CLIs = n_distinct(ID_CLI)) %>%
+  mutate(PERCENT = TOT_CLIs/sum(TOT_CLIs))  %>%
+  arrange(desc(PERCENT))
+
+ggplot(df_1_cli_fid_clean, aes(x=ID_NEG)) + geom_bar()
+
+```
+
+### df_2_cli_account 
+
+```{r}
+str(df_2_cli_account)
+summary(df_2_cli_account)
+
+## cleaning##
+df_2_cli_account_clean <- df_2_cli_account
+
+## formatting boolean as factor e numerical categories as factor  ##
+df_2_cli_account_clean <- df_2_cli_account_clean %>%
+  mutate(W_PHONE = as.factor(W_PHONE))%>%
+  mutate(TYP_CLI_ACCOUNT = as.factor(TYP_CLI_ACCOUNT))
+
+## correct NA in categories ##
+# we make use of the package forcats
+library(forcats)
+
+df_2_cli_account_clean <- df_2_cli_account_clean %>%
+  mutate(W_PHONE = fct_explicit_na(W_PHONE, "0")) %>%
+  mutate(EMAIL_PROVIDER = fct_explicit_na(EMAIL_PROVIDER, "(missing)")) %>%
+  mutate(TYP_JOB = fct_explicit_na(TYP_JOB, "(missing)"))
+
+```
+
+
+```{r}
+## explore distributions ##
+# COD_FID
+df_2_cli_account_clean %>%
+  group_by(EMAIL_PROVIDER) %>%
+  summarize(TOT_CLIs = n_distinct(ID_CLI)) %>%
+  mutate(PERCENT = TOT_CLIs/sum(TOT_CLIs)) %>%
+  arrange(desc(PERCENT))
+
+df_2_cli_account_clean %>%
+  summarize(TOT_EMAIL_PROVIDER = n_distinct(EMAIL_PROVIDER))
+
+# too many different values for EMAIL_PROVIDER to be an useful category
+
+# W_PHONE
+df_2_cli_account_clean %>%
+  group_by(W_PHONE) %>%
+  summarize(TOT_CLIs = n_distinct(ID_CLI)) %>%
+  mutate(PERCENT = TOT_CLIs/sum(TOT_CLIs)) %>%
+  arrange(desc(PERCENT))
+
+ggplot(df_2_cli_account_clean, aes(x=W_PHONE)) + geom_bar()
+
+# TYP_JOB
+df_2_cli_account_clean %>%
+  group_by(TYP_JOB) %>%
+  summarize(TOT_CLIs = n_distinct(ID_CLI)) %>%
+  mutate(PERCENT = TOT_CLIs/sum(TOT_CLIs)) %>%
+  arrange(desc(PERCENT))
+
+df_2_cli_account_clean %>%
+  summarize(TOT_TYP_JOB = n_distinct(TYP_JOB))
+
+ggplot(df_2_cli_account_clean, aes(x=TYP_JOB)) + geom_bar()
+
+```
+
+```{r}
+## lets review ##
+str(df_2_cli_account_clean)
+summary(df_2_cli_account_clean)
+```
+
+
+```{r}
+#too many missing values for EMAIL_PROVIDER to be an useful category
+#keep the most frequent values and (missing) while changing the remaing into "OTHER"
+freq_email_providers <- df_2_cli_account_clean %>%
+  group_by(EMAIL_PROVIDER) %>%
+  summarize(TOT_CLIs = n_distinct(ID_CLI)) %>%
+  mutate(PERCENT = TOT_CLIs/sum(TOT_CLIs)) %>%
+  arrange(desc(PERCENT)) %>%
+  mutate(PERCENT_COVERED = cumsum(TOT_CLIs)/sum(TOT_CLIs))
+
+head(freq_email_providers, 20)
+```
+
+```{r}
+clean_email_providers <- freq_email_providers %>%
+  mutate(EMAIL_PROVIDER = as.character(EMAIL_PROVIDER)) %>%
+  mutate(AUX = if_else(PERCENT_COVERED < 0.85 | (PERCENT_COVERED > 0.85 & lag(PERCENT_COVERED) < 0.85), 1,0)) %>%
+  mutate(EMAIL_PROVIDER_CLEAN = if_else(AUX | EMAIL_PROVIDER == "(missing)", EMAIL_PROVIDER, "others"))
+
+head(clean_email_providers, 20)
+```
+
+```{r}
+df_2_cli_account_clean <- df_2_cli_account_clean %>%
+  mutate(EMAIL_PROVIDER = as.character(EMAIL_PROVIDER)) %>%
+  left_join(clean_email_providers %>%
+              dplyr::select(EMAIL_PROVIDER, EMAIL_PROVIDER_CLEAN)
+            , by = "EMAIL_PROVIDER") %>%
+  dplyr::select(-EMAIL_PROVIDER) %>%
+  mutate(EMAIL_PROVIDER_CLEAN = as.factor(EMAIL_PROVIDER_CLEAN))
+```
+
+```{r}
+## explore distributions ##
+# EMAIL_PROVIDER_CLEAN
+df_2_cli_account_clean %>%
+  group_by(EMAIL_PROVIDER_CLEAN) %>%
+  summarize(TOT_CLIs = n_distinct(ID_CLI)) %>%
+  mutate(PERCENT = TOT_CLIs/sum(TOT_CLIs)) %>%
+  arrange(desc(PERCENT))
+
+ggplot(df_2_cli_account_clean, aes(x=EMAIL_PROVIDER_CLEAN)) + geom_bar()
+```
+
+```{r}
+## lets review ##
+str(df_2_cli_account_clean)
+summary(df_2_cli_account_clean)
+
+
+```
+
+
+### df_3_cli_address ###
+
+```{r}
+
+str(df_3_cli_address)
+summary(df_3_cli_address)
+```
+
+```{r}
+## cleaning ##
+df_3_cli_address_clean <- df_3_cli_address
+
+## convert PRV e REGION into factors ##
+df_3_cli_address_clean <- df_3_cli_address_clean %>%
+  mutate(PRV = as.factor(PRV)) %>%
+  mutate(REGION = as.factor(REGION)) %>%
+  distinct()
+```
+
+```{r}
+# closer look on df_3_cli_address
+df_3_cli_address_clean %>%
+  group_by(w_CAP = !is.na(CAP), w_PRV = !is.na(PRV), w_REGION = !is.na(REGION)) %>%
+  summarize(TOT_ADDs = n_distinct(ID_ADDRESS))
+```
+
+
+```{r}
+
+# drop the record without CAP - PRV - REGION
+df_3_cli_address_clean <- df_3_cli_address_clean %>%
+  filter(!is.na(CAP) & !is.na(PRV) & !is.na(REGION))
+```
+
+```{r}
+## explore distributions ##
+# PRV
+df_3_cli_address_clean %>%
+  group_by(PRV) %>%
+  summarize(TOT_ADDs = n_distinct(ID_ADDRESS)) %>%
+  mutate(PERCENT = TOT_ADDs/sum(TOT_ADDs)) %>%
+  arrange(desc(PERCENT))
+
+ggplot(df_3_cli_address_clean, aes(x=PRV)) + geom_bar()
+
+# REGION
+df_3_cli_address_clean %>%
+  group_by(REGION) %>%
+  summarize(TOT_ADDs = n_distinct(ID_ADDRESS)) %>%
+  mutate(PERCENT = TOT_ADDs/sum(TOT_ADDs)) %>%
+  arrange(desc(PERCENT))
+
+ggplot(df_3_cli_address_clean, aes(x=REGION)) + geom_bar()
+```
+
+```{r}
+## lets review ##
+str(df_3_cli_address_clean)
+summary(df_3_cli_address_clean)
+```
+
+
+### df_4_cli_privacy ###
+
+```{r}
+str(df_4_cli_privacy)
+summary(df_4_cli_privacy)
+```
+
+```{r}
+
+## cleaning ##
+df_4_cli_privacy_clean <- df_4_cli_privacy
+
+# formatting boolean into facotr
+df_4_cli_privacy_clean <- df_4_cli_privacy_clean %>%
+  mutate(FLAG_PRIVACY_1 = as.factor(FLAG_PRIVACY_1)) %>%
+  mutate(FLAG_PRIVACY_2 = as.factor(FLAG_PRIVACY_2)) %>%
+  mutate(FLAG_DIRECT_MKT = as.factor(FLAG_DIRECT_MKT))
+```
+
+```{r}
+## explore distributions ##
+# FLAG_PRIVACY_1
+df_4_cli_privacy_clean %>%
+  group_by(FLAG_PRIVACY_1) %>%
+  summarize(TOT_CLIs = n_distinct(ID_CLI)) %>%
+  mutate(PERCENT = TOT_CLIs/sum(TOT_CLIs)) %>%
+  arrange(desc(PERCENT))
+
+ggplot(df_4_cli_privacy_clean, aes(x=FLAG_PRIVACY_1)) + geom_bar()
+
+# FLAG_PRIVACY_2
+df_4_cli_privacy_clean %>%
+  group_by(FLAG_PRIVACY_2) %>%
+  summarize(TOT_CLIs = n_distinct(ID_CLI)) %>%
+  mutate(PERCENT = TOT_CLIs/sum(TOT_CLIs)) %>%
+  arrange(desc(PERCENT))
+
+ggplot(df_4_cli_privacy_clean, aes(x=FLAG_PRIVACY_2)) + geom_bar()
+
+# FLAG_DIRECT_MKT
+df_4_cli_privacy_clean %>%
+  group_by(FLAG_DIRECT_MKT) %>%
+  summarize(TOT_CLIs = n_distinct(ID_CLI)) %>%
+  mutate(PERCENT = TOT_CLIs/sum(TOT_CLIs)) %>%
+  arrange(desc(PERCENT))
+
+ggplot(df_4_cli_privacy_clean, aes(x=FLAG_DIRECT_MKT)) + geom_bar()
+
+```
+
+```{r}
+df_4_cli_privacy_clean %>%
+  group_by(FLAG_PRIVACY_1, FLAG_PRIVACY_2, FLAG_DIRECT_MKT) %>%
+  summarize(TOT_CLIs = n_distinct(ID_CLI)) %>%
+  mutate(PERCENT = TOT_CLIs/sum(TOT_CLIs)) %>%
+  arrange(desc(PERCENT))
+```
+
+```{r}
+## lets review ##
+str(df_4_cli_privacy_clean)
+summary(df_4_cli_privacy_clean)
+```
+
+
+
+### df_5_camp_cat ###
+
+```{r}
+str(df_5_camp_cat)
+summary(df_5_camp_cat)
+```
+
+```{r}
+## cleaning ##
+df_5_camp_cat_clean <- df_5_camp_cat
+
+# the field CHANNEL_CAMP has one value <-- is not relevant
+df_5_camp_cat_clean <- df_5_camp_cat_clean %>%
+  dplyr::select(-CHANNEL_CAMP)
+```
+
+```{r}
+## explore distributions ##
+df_5_camp_cat_clean %>%
+  group_by(TYP_CAMP) %>%
+  summarize(TOT_CAMPs = n_distinct(ID_CAMP)) %>%
+  mutate(PERCENT = TOT_CAMPs/sum(TOT_CAMPs)) %>%
+  arrange(desc(PERCENT))
+
+ggplot(df_5_camp_cat_clean, aes(x=TYP_CAMP)) + geom_bar()
+```
+
+
+
+### df_6_camp_event ###
+
+
+
+```{r}
+str(df_6_camp_event)
+summary(df_6_camp_event)
+```
+
+```{r}
+## cleaning ##
+df_6_camp_event_clean <- df_6_camp_event
+
+# despite the field EVENT_TIME is datetime, we just need the corresponding dates
+df_6_camp_event_clean <- df_6_camp_event_clean %>%
+  mutate(EVENT_DATE = as.Date(EVENT_DATE, format="%Y-%m-%dT%H:%M:%S"))
+
+# for the purpose of the analysis we are delivering here it would make no difference distinguish "ERRORS" and "BOUNCE"
+# lets combine them into a common category "FAILURE" with "F" as EVENT_CODE before changing the field to factor
+df_6_camp_event_clean <- df_6_camp_event_clean %>%
+  mutate(TYP_EVENT = as.factor(if_else(TYP_EVENT == "E" | TYP_EVENT == "B", "F", as.character(TYP_EVENT))))
+```
+
+```{r}
+## explore distributions ##
+# type event
+df_6_camp_event_clean %>%
+  group_by(TYP_EVENT) %>%
+  summarize(TOT_EVENTs = n_distinct(ID_EVENT), TOT_CLIs = n_distinct(ID_CLI), TOT_CAMPs = n_distinct(ID_CAMP)) %>%
+  mutate(PERCENT_EVENT = TOT_EVENTs/sum(TOT_EVENTs), PERCENT_CLI = TOT_CLIs/sum(TOT_CLIs), PERCENT_CAMP = TOT_CAMPs/sum(TOT_CAMPs)) %>%
+  arrange(desc(PERCENT_EVENT), desc(PERCENT_EVENT), desc(PERCENT_CAMP))
+```
+
+```{r}
+ggplot(df_6_camp_event_clean %>% select(TYP_EVENT, ID_EVENT) %>% distinct(), aes(x=TYP_EVENT)) + geom_bar()
+ggplot(df_6_camp_event_clean %>% select(TYP_EVENT, ID_CLI) %>% distinct(), aes(x=TYP_EVENT)) + geom_bar()
+ggplot(df_6_camp_event_clean %>% select(TYP_EVENT, ID_CAMP) %>% distinct(), aes(x=TYP_EVENT)) + geom_bar()
+```
+
+```{r}
+# min - max dates
+df_6_camp_event_clean %>% summarize(MIN_DATE = min(EVENT_DATE), MAX_DATE = max(EVENT_DATE))
+```
+
+
+
+```{r}
+#### DATA PREPARATION ####
+# the aim is to create what we need for our model.
+
+# first we explore the distribution
+
+df_6_camp_event_clean_w_type <- df_6_camp_event_clean %>%
+  left_join(df_5_camp_cat_clean
+            , by = "ID_CAMP")
+```
+
+```{r}
+# send
+df_sents <- df_6_camp_event_clean_w_type %>%
+  filter(TYP_EVENT == "S") %>%
+  dplyr::select(-TYP_EVENT) %>%
+  dplyr::select(ID_EVENT_S = ID_EVENT, ID_CLI, ID_CAMP, TYP_CAMP, ID_DELIVERY, SEND_DATE = EVENT_DATE)
+```
+
+```{r}
+# open
+df_opens <- df_6_camp_event_clean_w_type %>%
+  filter(TYP_EVENT == "V") %>%
+  dplyr::select(-TYP_EVENT) %>%
+  dplyr::select(ID_EVENT_O = ID_EVENT, ID_CLI, ID_CAMP, TYP_CAMP, ID_DELIVERY, OPEN_DATE = EVENT_DATE) %>%
+  group_by(ID_CLI, ID_CAMP, ID_DELIVERY) %>%
+  filter(OPEN_DATE == min(OPEN_DATE)) %>%
+  filter(row_number() == 1) %>%
+  ungroup()
+```
+
+```{r}
+# click
+df_clicks <- df_6_camp_event_clean_w_type %>%
+  filter(TYP_EVENT == "C") %>%
+  dplyr::select(-TYP_EVENT) %>%
+  dplyr::select(ID_EVENT_C = ID_EVENT, ID_CLI, ID_CAMP, TYP_CAMP, ID_DELIVERY, CLICK_DATE = EVENT_DATE) %>%
+  group_by(ID_CLI, ID_CAMP, ID_DELIVERY) %>%
+  filter(CLICK_DATE == min(CLICK_DATE)) %>%
+  filter(row_number() == 1) %>%
+  ungroup()
+```
+
+```{r}
+# failure
+df_fails <- df_6_camp_event_clean_w_type %>%
+  filter(TYP_EVENT == "F") %>%
+  dplyr::select(-TYP_EVENT) %>%
+  dplyr::select(ID_EVENT_F = ID_EVENT, ID_CLI, ID_CAMP, TYP_CAMP, ID_DELIVERY, FAIL_DATE = EVENT_DATE) %>%
+  group_by(ID_CLI, ID_CAMP, ID_DELIVERY) %>%
+  filter(FAIL_DATE == min(FAIL_DATE)) %>%
+  filter(row_number() == 1) %>%
+  ungroup()
+```
+
+```{r}
+# attach send to open
+df_sents_w_open <- df_sents %>%
+  left_join(df_opens
+            , by = c("ID_CLI", "ID_CAMP", "ID_DELIVERY", "TYP_CAMP")
+            ) %>%
+  filter(is.na(OPEN_DATE) | SEND_DATE <= OPEN_DATE) %>%
+  mutate(DIFF = as.integer(OPEN_DATE - SEND_DATE))
+```
+
+```{r}
+# number of sents without opens
+df_sents_w_open %>%
+  group_by(w_open = !is.na(DIFF)) %>%
+  summarize(TOT_SENTs = n_distinct(ID_EVENT_S)) %>%
+  mutate(PERCENT = TOT_SENTs/sum(TOT_SENTs)) %>%
+  arrange(desc(PERCENT))
+
+ggplot(df_sents_w_open, aes(x=!is.na(DIFF))) + geom_bar()
+```
+
+```{r}
+# distribution days opens
+df_sents_w_open %>% filter(!is.na(DIFF)) %>%
+  group_by(DIFF) %>%
+  summarize(TOT_EVENTs = n_distinct(ID_EVENT_S)) %>%
+  arrange(DIFF) %>%
+  mutate(PERCENT_COVERED = cumsum(TOT_EVENTs)/sum(TOT_EVENTs))
+```
+
+```{r}
+ggplot(df_sents_w_open %>% filter(!is.na(DIFF)) %>%
+         group_by(DIFF) %>%
+         summarize(TOT_EVENTs = n_distinct(ID_EVENT_S)) %>%
+         arrange(DIFF) %>%
+         mutate(PERCENT_COVERED = cumsum(TOT_EVENTs)/sum(TOT_EVENTs)) %>%
+         filter(DIFF <= 14)
+       , aes(y=PERCENT_COVERED, x=DIFF)) + geom_line() + geom_point() + scale_x_continuous(breaks=seq(0,14,2), minor_breaks=0:14)
+```
+
+```{r}
+# we can choose as window function 2 day
+window_days <- 2
+
+### construction of the datamart ###
+
+# our target variable will be if a send event is open within the timespan of the window days
+
+target_event <- df_sents_w_open %>%
+  mutate(TARGET = as.factor(if_else(!is.na(DIFF) & DIFF <= window_days, "1", "0"))) %>%
+  dplyr::select(ID_EVENT_S, ID_CLI, ID_CAMP, ID_DELIVERY, SEND_DATE, TARGET)
+```
+
+
+```{r}
+# some relavant variable we want to include are:
+# - average open rate (within 14 days) of the communications received by the client in the 30 days before the sent
+# - average click-through (within 14 days) rate of the communications received by the client in the 30 days before the sent
+
+# in order to have comparable situation we are considering:
+# - targeted sent made after the 2019-02-01 and window_days before 2019-04-30
+# - targeted sent to clients registered by at least 30 days
+
+rate_window <- 14
+prev_window <- 30
+
+dt_start <- as.Date("2019-02-01")
+dt_end <- as.Date("2019-04-30") - window_days
+
+relevant_event <- df_sents %>%
+  left_join(df_opens
+            , by = c("ID_CLI", "ID_CAMP", "ID_DELIVERY", "TYP_CAMP")
+  ) %>%
+  filter(is.na(OPEN_DATE) | SEND_DATE <= OPEN_DATE) %>%
+  left_join(df_clicks
+            , by = c("ID_CLI", "ID_CAMP", "ID_DELIVERY", "TYP_CAMP")
+  ) %>%
+  filter(is.na(CLICK_DATE) | SEND_DATE <= CLICK_DATE) %>%
+  left_join(df_fails
+            , by = c("ID_CLI", "ID_CAMP", "ID_DELIVERY", "TYP_CAMP")
+  ) %>%
+  filter(is.na(FAIL_DATE) | SEND_DATE <= FAIL_DATE) %>%
+  mutate(DIFF_OPEN = as.integer(OPEN_DATE - SEND_DATE)) %>%
+  mutate(DIFF_CLICK = as.integer(CLICK_DATE - SEND_DATE)) %>%
+  filter(is.na(DIFF_OPEN) | DIFF_OPEN < rate_window) %>%
+  filter(is.na(DIFF_CLICK) | DIFF_CLICK < rate_window)
+
+names(relevant_event) <- sapply(names(relevant_event), paste0, "_PREV")
+
+target_event_w_prev <- target_event %>% filter(SEND_DATE >= dt_start & SEND_DATE <= dt_end) %>%
+  left_join(relevant_event
+            , by = c("ID_CLI" = "ID_CLI_PREV")
+            ) %>%
+  filter(is.na(SEND_DATE_PREV) | (SEND_DATE_PREV < SEND_DATE & SEND_DATE <= SEND_DATE_PREV + prev_window)) %>%
+  mutate(OPENED = if_else(OPEN_DATE_PREV <= SEND_DATE & SEND_DATE <= OPEN_DATE_PREV + prev_window, 1, 0)) %>%
+  mutate(CLICKED = if_else(CLICK_DATE_PREV <= SEND_DATE & SEND_DATE <= CLICK_DATE_PREV + prev_window, 1, 0)) %>%
+  mutate(FAILED = if_else(!is.na(ID_EVENT_F_PREV), 1, 0)) %>%
+  group_by(ID_EVENT_S, ID_CLI, ID_CAMP, ID_DELIVERY, SEND_DATE,  TARGET) %>%
+  summarize(NUM_SEND_PREV = n_distinct(ID_EVENT_S_PREV, na.rm = T)
+            , NUM_OPEN_PREV = sum(OPENED, na.rm = T)
+            , NUM_CLICK_PREV = sum(CLICKED, na.rm = T)
+            , NUM_FAIL_PREV = sum(FAILED, na.rm = T)
+            ) %>%
+  ungroup() %>%
+  mutate(OPEN_RATE_PREV = NUM_OPEN_PREV/NUM_SEND_PREV) %>%
+  mutate(CLICK_RATE_PREV = NUM_CLICK_PREV/NUM_OPEN_PREV) %>%
+  mutate(W_SEND_PREV = as.factor(NUM_SEND_PREV > 0)) %>%
+  mutate(W_FAIL_PREV = as.factor(NUM_FAIL_PREV > 0)) %>%
+  mutate(SEND_WEEKDAY = as.factor(weekdays(SEND_DATE))) %>%
+  mutate(OPEN_RATE_PREV = if_else(is.na(OPEN_RATE_PREV), 0, OPEN_RATE_PREV)) %>%
+  mutate(CLICK_RATE_PREV = if_else(is.na(CLICK_RATE_PREV), 0, CLICK_RATE_PREV))
+```
+
+
+```{r}
+# add client data
+
+df_master <- target_event_w_prev %>%
+  left_join(df_1_cli_fid_clean %>%
+              dplyr::select(ID_CLI, ID_NEG, TYP_CLI_FID, COD_FID, STATUS_FID, FIRST_DT_ACTIVE, NUM_FIDs)
+            , by = "ID_CLI") %>%
+  filter(FIRST_DT_ACTIVE <= SEND_DATE) %>%
+  # filter(FIRST_DT_ACTIVE <= SEND_DATE - 30) %>%
+  mutate(AGE_FID = as.integer(SEND_DATE - FIRST_DT_ACTIVE)) %>%
+  left_join(df_2_cli_account_clean
+            , by = "ID_CLI") %>%
+  left_join(df_3_cli_address_clean %>%
+              dplyr::select(ID_ADDRESS, PRV, REGION)
+            , by = "ID_ADDRESS") %>%
+  left_join(df_4_cli_privacy_clean
+            , by = "ID_CLI") %>%
+  mutate(PRV = fct_explicit_na(PRV)) %>%
+  mutate(REGION = fct_explicit_na(REGION)) %>%
+  dplyr::select(-ID_ADDRESS, -ID_CLI, -ID_CAMP, -ID_DELIVERY, -SEND_DATE, -FIRST_DT_ACTIVE)
+```
+
+```{r}
+# check there are not duplicates
+df_master %>%
+  group_by(ID_EVENT_S) %>% 
+  summarize(num = n()) %>% 
+  group_by(num) %>%
+  count()
+```
+
+```{r}
+df_master <- df_master %>% 
+  mutate(NUM_FIDs=as.integer(NUM_FIDs))
+```
+
+
+### DATA EXPLORATION AND PREPROCESSING
+
+Il processo di preparazione del dato ha permesso di creare il dataset su cui basare l'analisi, dato da 1111503 osservazioni e 26 variabilI. 
+
+A questo punto è stata effettuata una fase esplorativa per comprendere a pieno il loro significato in relazione alla variabile target e avere una prima idea su quali sono gli attributi più utili a discriminare tra le due classi di clienti.
+
+Si effettuano dei boxplot per vedere la diversa distribuzione delle variabili numeriche rispetto alle due classi della variabile target.
+```{r}
+par(mfrow=c(2,4))
+plot(df_master$NUM_SEND_PREV ~df_master$TARGET)
+plot(df_master$NUM_OPEN_PREV ~df_master$TARGET)
+plot(df_master$NUM_CLICK_PREV ~df_master$TARGET)
+plot(df_master$NUM_FAIL_PREV ~df_master$TARGET)
+plot(df_master$NUM_FIDs ~df_master$TARGET)
+plot(df_master$OPEN_RATE_PREV ~df_master$TARGET)
+plot(df_master$CLICK_RATE_PREV ~df_master$TARGET)
+plot(df_master$AGE_FID ~df_master$TARGET)
+
+par(mfrow=c(1,1))
+
+```
+
+Da questi boxplot non si evincono particolari differenze tra le distribuzioni delle esplicative numeriche differenziate in base alla classe di appartenenza. 
+L'unica eccezione è data dall'esplicativa "OPEN_RATE_PREV". E' evidente, infatti, che i clienti che aprono la mail in questione hanno una percentuale di mail precedentemente aperte molto superiore a quella dell'altra classe di consumatori.
+
+Si procede con l'analisi della correlazione tra le variabili numeriche per evitare la presenza di multicollinearità all'interno dei modelli.
+
+```{r}
+var_df_master_num <- which(sapply(df_master ,is.numeric))
+
+library(corrplot)
+corrplot(cor(df_master[var_df_master_num]),type = "upper",method='number',tl.cex = .7,cl.cex = .7,number.cex = 0.7)
+
+```
+
+
+Dal corrplot si evince che le due coppie di variabili numeriche più correlate tra di loro sono rispettivamente NUM_OPEN_PREV-OPEN_RATE_PREV e NUM_CLICK_PREV-CLICK_RATE_PREV.
+
+Dato il significato delle variabili, quanto emerso risulta sensato, infatti l'una è "derivata" dall'altra. 
+
+Per evitare multicollinearità nei modelli, quindi, si procede con l'eliminazione di due di queste quattro variabili, "NUM_OPEN_PREV" e "NUM_CLICK_PREV". 
+
+Inoltre, vengono eliminate anche W_SEND_PREV e W_FAIL_PREV perchè rispettivamente "incluse" nelle variabili "NUM_SEND_PREV" e "NUM_FAIL_PREV" (ad esempio, tutte le volte in cui W_SEND_PREV è uguale a FALSE, la variabile NUM_SAND_PREV è pari a 0).
+
+Infine, viene eliminata anche TYP_CLI_ACCOUNT perchè di dubbio significato e si prenderà in considerazione soltanto la Regione, dato che la variabile PRV presenta diversi livelli e quindi un peso computazionale piuttosto elevato.  
+
+Si procede con l'eliminazione dal dataset delle variabili elencate. 
+
+```{r}
+df_sub <- df_master %>% 
+  dplyr::select(-ID_EVENT_S,-NUM_OPEN_PREV,-NUM_CLICK_PREV,-W_SEND_PREV,-W_FAIL_PREV,-TYP_CLI_ACCOUNT,-PRV)
+
+#assegnazione dei livelli delle variabili booleane poichè le categorie 0,1 devono essere attribuite solamente alla variabile di classe.
+
+levels(df_sub$TARGET) <- c("not_opened", "opened") 
+levels(df_sub$TYP_CLI_FID) <- c("not_main", "main_account")
+levels(df_sub$STATUS_FID) <- c("not_active", "active_account")
+levels(df_sub$W_PHONE) <- c("with_phone", "Without_phone")
+levels(df_sub$FLAG_PRIVACY_1) <- c("not_flag1", "flag1")
+levels(df_sub$FLAG_PRIVACY_2) <- c("not_flag2", "flag2")
+levels(df_sub$FLAG_DIRECT_MKT) <- c("not_flagMKT", "flagMKT")
+```
+
+```{r}
+var_num <- which(sapply(df_sub,is.numeric)) #subset variabili numeriche
+
+library(corrplot)
+
+corrplot(cor(df_sub[var_num]),type = "upper",method='number',tl.cex = .7,cl.cex = .7,number.cex = 0.7) 
+
+```
+
+Dal corrplot si evince che, a seguito dell'eliminazione delle variabili suddette, sono state eliminate correlazione statisticamente significative. 
+
+Per quanto riguarda le variabili categoriche, si procede con una feature selection effettuata tramite il test *Chi-Quadro*, utile a verificare l'ipotesi di indipendenza degli attributi con la variabile target.
+
+```{r}
+#subset variabili categoriche
+data_factor=as.data.frame(df_sub[,which(sapply(df_sub,is.factor))])
+
+library(knitr)
+chi_test=function(dataset) {
+  matrice=matrix(NA, ncol=3,nrow=dim(dataset)[2]-1)
+for (i in 1:dim(dataset)[2]-1) {
+  matrice[i,1]=colnames(dataset)[i+1]
+  matrice[i,2]=chisq.test(table(dataset[,1],dataset[,i+1]))$p.value
+  matrice[i,3]=chisq.test(table(dataset[,1],dataset[,i+1]))$statistic 
+}
+  colnames(matrice)=c("variabile categorica","p-value","statistica test")
+  return(kable(matrice))
+  
+}
+
+chi_test(data_factor)
+```
+
+Dai risultati del chi-quadro test, si evince che tutte le variabili categoriche sono dipendenti dalla variabile target poichè tutti i p-value prossimi allo zero permettono di rifiutare l'ipotesi nulla di indipendenza.
+
+Terminata la fase di feature selection, si analizza la distribuzione delle osservazioni all'interno della variabile target. 
+
+```{r}
+table(df_sub$TARGET)
+
+unbalanced_class=ggplot(df_sub, aes(x=TARGET))+
+geom_bar(width=0.5,fill="steelblue")+
+stat_count(binwidth=1, geom="text", aes(label=..count..), vjust=0.25) +
+theme_minimal()
+options(repr.plot.width=8,repr.plot.height=3)
+unbalanced_class
+```
+
+E' evidente che si è in presenza di un dataset caratterizzato da classi sbilanciate. Infatti la classe positiva, ovvero quella di interesse, è pari solamente a circa 1/6 delle osservazioni totali. 
+
+Portare avanti l'analisi con un dataset dalle classi sbilanciate, i modelli potrebbero risultare distorti e aventi strutturali problemi nella stima dei coefficienti.
+In questi casi, il problema può essere risolto facendo ricorso a tecniche di bilanciamento delle due classi (oversample, undersample, etc...).
+
+Dal momento che il numero di osservazioni appare molto elevato, effettuare un oversample richiederebbe uno sforzo computazionale troppo elevato per stimare i modelli di Machine Learning. 
+Si è deciso, a tal proposito, di effettuare un *undersample*, tecnica grazie alla quale si adotta una eliminazione randomica di alcune osservazioni appartenenti alla classe negativa in modo tale che si possano formare due classi bilanciate. 
+
+```{r}
+library(ROSE)
+df_sub_under<- ovun.sample(TARGET ~ ., data = df_sub, method = "under", N=336180,seed=12345)$data
+table(df_sub_under$TARGET)
+```
+
+Come si evince dalla tabella delle frequenze della variabile target, le classi risultano bilanciate, si può procedere quindi con la fase di data modelling. 
+
+###Data Modelling
+
+Terminata il pre-processing, si passa alla fase di Data Modeling.
+
+Si è scelto di sviluppare i seguenti modelli:
+. Decision Tree;
+. Neural Network (NNET);
+. Logistic regression.
+
+Per ottenere una validazione dei classificatori utilizzati è stato utilizzato un approccio basato sulla cross validation, il cosiddetto K-Folds Cross Validation. Questa tecnica statistica suddivide il dataset in k partizioni di eguale numerosità e assicura che tutti i record vengano utilizzati almeno una volta sia nel training set che nel test set. Il numero di folds utilizzato è pari a k=3.
+
+I parametri caratteristici di ogni modello, non sono stati scelti a priori ma viene azionato un sistema di tuning al fine di identificare il parametro migliore, che permette cioè di stimare il modello migliore.
+
+Infine, sia per effettuare il tuning che per confrontare i modelli, è stata utilizzata la metrica denominata ROC.
+
+L'apprendimento (learning) dei modelli avviene sul train set, pari al 67% del dataset iniziale, su cui è stato effettuato l'undersampling per risolvere il problema delle classi sbilanciate.
+
+
+```{r, include=T}
+
+data=df_sub_under
+
+#train e test set (1/3,2/3)
+smp_size <- floor(0.67 * nrow(data))
+
+set.seed(12345)
+train_ind <- sample(seq_len(nrow(data)), size = smp_size)
+
+train <- data[train_ind, ]
+test <- data[-train_ind, ]
+
+```
+
+*Decision Tree*
+
+Il decision tree fa parte di modelli cosiddetti "euristici"" che non sempre forniscono risultati ottimali ma sono in grado di ottenere approssimazioni ragionevoli senza richiedere sforzi computazionali eccessivi o ipotesi restrittive sui dati di partenza. 
+Permette, inoltre, di calcolare l'importanza delle variabili rispetto alla risposta e, per questo motivo, il decision tree viene anche utilizzato come strumento di "feature selection" per selezionare un numero inferiore di variabili con cui stimare la regressione logistica e la neural network in quanto entrambi i modelli vengono penalizzatati eccessivamente dall'inserimento di troppe variabili.
+ 
+
+```{r}
+set.seed(12345)
+library(caret)
+metric <- "ROC"
+Ctrl <- trainControl(method = "cv" , number=3, classProbs = TRUE,
+summaryFunction = twoClassSummary)
+rpartTune <- train(TARGET ~ ., data = train, method = "rpart",tuneLength = 5, trControl = Ctrl, metric=metric)
+rpartTune
+```
+
+Il complexity parameter del decision tree è stato tunato e quello ottimo risulta pari a 7.549851e-05. 
+
+
+```{r, include=T}
+# performance evaluation
+library(pander)
+pander(getTrainPerf(rpartTune))
+```
+
+
+A questo punto si ristima il decision tree impostando il valore ottimale del CP.
+
+```{r, include=T, warning=F}
+set.seed(12345)
+Ctrl_save <- trainControl(method = "cv" , number=3, summaryFunction = twoClassSummary,
+classProbs = TRUE, savePredictions = TRUE)
+
+rpartTuneMy <- train(TARGET ~ ., data = train, method = "rpart",
+tuneGrid=data.frame(cp=7.549851e-05),
+trControl = Ctrl_save, metric=metric)
+```
+
+
+
+
+```{r, include=T, warning=F}
+set.seed(12345)
+library(rpart)
+library(rpart.plot)
+mytree <- rpart(TARGET ~ ., data = train, method = "class", cp = 7.549851e-05)
+rpart.plot(mytree, type = 4, extra = 101, cex = 0.5)
+```
+
+Si analizza l'importanza delle variabili inserite nel modello:
+
+```{r, include=T}
+Vimportance <- varImp(rpartTuneMy)
+print(Vimportance) 
+```
+
+A seguito della stima del decision tree, si stila un ranking delle variabili in base alla loro importanza rispetto alla variabile target. Per i modelli successivi, è stato deciso di utilizzare solamente le 10 variabili con maggior importanza. 
+
+Di seguito, quindi, prima di procedere con la stima degli altri algoritmi, si effettua un subset del dataset iniziale con le variabili scelte.
+
+```{r}
+d_sub_net <- train %>% 
+  dplyr::select(TARGET,OPEN_RATE_PREV,CLICK_RATE_PREV,TYP_JOB,NUM_SEND_PREV,AGE_FID,EMAIL_PROVIDER_CLEAN, SEND_WEEKDAY, FLAG_DIRECT_MKT , FLAG_PRIVACY_1)
+```
+
+*Neural Network*
+
+E' stata sviluppata una rete neurale, modello che permette di approssimare qualsiasi funzione tramite l'interconnessione di neuroni artificiali, creando un percettrone. Lo svantaggio della rete neurale è la difficile interpretazione dei risultati finali.
+
+```{r, include=T}
+
+tunegrid <- expand.grid(size=c(1:3), decay = c(0.0002, 0.0003, 0.00001, 0.0001))
+nnetFit_defgridDR1 <- train(d_sub_net[-1], d_sub_net$TARGET, 
+                            method = "nnet",
+                            preProcess = 'pca',
+                            #Nel tunare la NNET viene effettuato il pre-processing delle variabili tramite PCA
+                            metric=metric, 
+                            trControl=Ctrl, tuneGrid=tunegrid,
+                            trace = FALSE,
+                            maxit = 10)
+pander(getTrainPerf(nnetFit_defgridDR1))
+```
+
+ 
+```{r}
+pander(nnetFit_defgridDR1$bestTune) #best parameter
+```
+
+```{r, include=T}
+
+tunegrid <- expand.grid(size=c(1:3), decay = c(0.0002, 0.0003, 0.00001, 0.0001))
+nnetFit_defgridDR2 <- train(d_sub_net[-1], d_sub_net$TARGET, 
+                            method = "nnet",
+                            preProcess = c('center', "scale"),
+                            #Nel tunare la NNET viene effettuata la standardizzazione delle variabili
+                            metric=metric, 
+                            trControl=Ctrl, tuneGrid=tunegrid,
+                            trace = FALSE,
+                            maxit = 10)
+pander(getTrainPerf(nnetFit_defgridDR2))
+```
+
+```{r}
+pander(nnetFit_defgridDR2$bestTune) #best parameter
+```
+
+```{r, include=T}
+
+tunegrid <- expand.grid(size=c(1:3), decay = c(0.0002, 0.0003, 0.00001, 0.0001))
+nnetFit_defgridDR3 <- train(d_sub_net[-1], d_sub_net$TARGET, 
+                            method = "nnet",
+                            preProcess = c('range'),
+                            #Nel tunare la NNET viene effettuata la normalizzazione delle variabili
+                            metric=metric, 
+                            trControl=Ctrl, tuneGrid=tunegrid,
+                            trace = FALSE,
+                            maxit = 10)
+pander(getTrainPerf(nnetFit_defgridDR3))
+```
+
+```{r}
+pander(nnetFit_defgridDR3$bestTune) #best parameter
+```
+
+
+Si utilizzano quindi i parametri e il metodo di preprocess migliori emersi in precedenza per la rete neurale
+```{r, include=T}
+
+set.seed(12345)
+tunegrid <- expand.grid(size=3, decay =0.0003)
+nnetFit_finale <- train(d_sub_net[-1], d_sub_net$TARGET,
+method = "nnet",
+preProcess = 'pca',
+metric=metric,
+trControl=Ctrl_save, tuneGrid=tunegrid,
+trace = FALSE,
+maxit = 10)
+
+```
+
+
+*Logistic Regression*
+
+La regressione logistica, al contrario, fa parte dei modelli di regressione, modelli facilmente comprensibili in quanto è possibile misurare quantitativamente l'effetto delle diverse variabili sulla risposta a partire dai coefficienti assegnati dal modello.
+
+
+```{r, include=T}
+set.seed(12345)
+logistic_sub <- train(TARGET~., data=d_sub_net, trControl=Ctrl_save, metric=metric,
+method="glm",family=binomial())
+pander(getTrainPerf(logistic_sub))
+```
+
+
+### MODELS EVALUATION
+
+Per confrontare i tre algoritmi sviluppati è stata utilizzata la ROC Curve e l'AUC, ovvero l'area sottostante la curva. L'obiettivo è quello di scegliere il modello migliore, con un AUC più alto per utilizzarlo nella fase di data driven action.
+
+```{r}
+
+roc_values <- cbind(as.data.frame(logistic_sub$pred$obs), as.data.frame(logistic_sub$pred$opened))
+nnet <- as.data.frame(nnetFit_finale$pred$opened)
+dt <- as.data.frame(rpartTuneMy$pred$opened)
+
+roc_values <- cbind(roc_values, nnet, dt)
+names(roc_values) <- c("obs","log_sub","nnet", "dt")
+library(plotROC)
+longtest <- melt_roc(roc_values, "obs", c("log_sub","nnet", "dt"))
+longtest$D <- ifelse(longtest$D=="opened",1,0)
+names(longtest)[3] <- "Models"
+
+g <- ggplot(longtest, aes(m=M, d=D, color=Models)) +
+geom_roc(n.cuts=0) +
+coord_equal() +
+style_roc(xlab="1-Specificity", ylab="Sensitivity")
+
+g + annotate("text", x=0.75, y=0.4, label="AUC") +
+annotate("text", x=0.75, y=0.35, label=paste("dt =", round(calc_auc(g)$AUC[1], 4))) +
+annotate("text", x=0.75, y=0.30, label=paste("log_sub =", round(calc_auc(g)$AUC[2], 4))) +
+annotate("text", x=0.75, y=0.25, label=paste("nnet =", round(calc_auc(g)$AUC[3], 4)))
+
+```
+
+```{r, include=T}
+
+test_model<- function(model, y, len = NULL, search = "grid") {
+  test_pred <- predict(model,test)
+  prec <- precision(data = test_pred, reference = test$TARGET)
+  Fmeas <- F_meas(data = test_pred, reference = test$TARGET)
+  rec <- recall(data = test_pred, reference = test$TARGET)
+  
+  return (c(prec, rec, Fmeas))
+}
+
+```
+
+```{r, include=T}
+
+performance_value= as.data.frame(test_model(rpartTuneMy))
+performance_value$log_sub= test_model(logistic_sub)
+performance_value$nnet= test_model(nnetFit_finale)
+colnames(performance_value)[1]= 'dt'
+rownames(performance_value)= c('Precision','Recall','F1-measure')
+kable(performance_value)
+
+```
+
+Dalla rappresentazione della ROC curve e dal calcolo dell'AUC, si evince che il modello migliore è rappresentato dalla regressione logistica, avente un'AUC pari a 0.8216.
+
+Essendo in presenza di un dataset avente classi sbilanciate, l'accuracy, ovvero la capacità di effettuare previsioni corrette su nuovi records, non è significativa per misurare la "bontà" del modello poichè, in questo caso, si basa sulla cosiddetta ZeroR rule, secondo il quale il classificatore considera solamente i records del dataset appartenenti alla classe più frequente. 
+Le misure più adatte per analizzare la capacità predittiva del modello, quindi, risultano essere la precision e la recall. In particolare, diventa opportuno considerare le due metriche simultaneamente utilizzando la F1 Measure che, tramite la media armonica, riassume precision e recall.
+
+Come si evince dalla suddetta tabella, la regressione logistica rimane il modello migliore anche dal punto di vista della metrica F1-Measure.
+
+Si utilizza, quindi, la regressione logistica per effettuare un'azione di data driven, con l'obiettivo di verificare l'efficacia del modello stimato e analizzare qualche esempio pratico.
+
+
+
+### DATA DRIVEN ACTION
+
+Per concludere, si cerca una risposta alla domanda di business iniziale effettuando dei test con un individuo esempio.
+
+L'obiettivo di questi test è mostrare concretamente e confermare l'importanza delle variabili così come è emersa grazie al modello logistico, in modo tale da capire in che modo migliorare la campagna di marketing effetuata tramite mail per far si che le email vengano aperte entro due giorni da più clienti possibili.
+
+Di seguito è riportato un esempio in cui possibile osservare come, al cambiare del valore di una sola delle esplicative risultate più importanti, cambia la classe di appartenenza dell'individuo in questione.
+
+```{r}
+
+summary(logistic_sub)
+
+```
+
+Il coefficiente delle variabili stimato dal modello logistico esprime la variazione del logit della risposta media. Quindi, calcolando l'esponenziale del coefficiente si ottiene l'odds ratio, ovvero la ragione di scommessa. 
+Se l'odds ratio è pari a 1 significa che non c'è associazione tra l'esplicativa e la risposta, se invece questo è maggiore di uno c'è associazione positiva. Se infine risulta minore di 1, l'associazione è negativa.
+
+Dall'analisi del summary del modello logistico stimato si evince che le variabili che risultano più significative sono le seguenti:
+
+- OPEN_RATE_PREV (odds ratio = exp(3.561) = 35.19838). Calcolando l'odds ratio si evince che c'è correlazione positiva tra la risposta e questa esplicativa. Questo vuol dire che aumentando di un'unità il valore di OPEN_RATE_PREV la ragione di scommessa che la risposta diventi positiva aumenta del 35%.
+- CLICK_RATE_PREV (odds ratio = exp(2.65e-01) = 1.269471). Anche per questa esplicativa l'associazione con la risposta è positiva quindi può essere effettuato un ragionamento analogo alla precedente.
+- AGE_FID (odds ratio = exp(-4.039e-04) = 0.9995848). Per questa variabile l'associazione con la risposta è negativa. Questo vuol dire che aumentando di un giorno "l'età" del programma fedeltà, la probabilità che il cliente passi dalla classe negativa a quella positiva scende dello 0,04%.
+- SEND_WEEKDAY                        
+- FLAG_DIRECT_MKTflagMKT                     
+- FLAG_PRIVACY_1flag1
+
+Si utilizza a questo scopo un cliente selezionato randomicamente dal test set. In questo caso, il modello di regressione logistica predice correttamente il fatto che il cliente appartiene alla classe negativa "not-opened" di coloro che non aprono la mail entro due giorni dalla data di invio.
+
+```{r}
+
+#test not opened
+
+#test$ID <- seq.int(nrow(test))
+
+user_test1=test[80517,]
+
+user_test10<-user_test9<-user_test8<-user_test7<-user_test6<-user_test5<-user_test4<-user_test3<-user_test2<-user_test1
+user_test2$AGE_FID<-150  
+user_test3$OPEN_RATE_PREV <- 0.73
+user_test4$CLICK_RATE_PREV<-0.5
+user_test5$SEND_WEEKDAY<-'luned�'
+user_test6$SEND_WEEKDAY<-'gioved�'
+user_test7$SEND_WEEKDAY<-'mercoled�'
+user_test8$SEND_WEEKDAY<-'venerd�'
+user_test9$SEND_WEEKDAY<-'sabato'
+user_test10$SEND_WEEKDAY<-'domenica'
+
+predict(logistic_sub,user_test1)
+predict(logistic_sub,user_test2) #age fid diminuito
+predict(logistic_sub,user_test3) #open rate aumentato di 0.4
+predict(logistic_sub,user_test4) #click rate aumentato di 0.5
+predict(logistic_sub,user_test5) #lun
+predict(logistic_sub,user_test6) #gio
+predict(logistic_sub,user_test7) #merc
+predict(logistic_sub,user_test8) #ven
+predict(logistic_sub,user_test9) #sab
+predict(logistic_sub,user_test10) #dom
+
+predict(logistic_sub,user_test1, type="prob")
+predict(logistic_sub,user_test2, type="prob")
+predict(logistic_sub,user_test3, type="prob")
+predict(logistic_sub,user_test4, type="prob") 
+predict(logistic_sub,user_test5, type="prob") 
+predict(logistic_sub,user_test6, type="prob") 
+predict(logistic_sub,user_test7, type="prob") 
+predict(logistic_sub,user_test8, type="prob") 
+predict(logistic_sub,user_test9, type="prob") 
+predict(logistic_sub,user_test10, type="prob") 
+```
+
+Sul cliente test per cui veniva predetta correttamente l'appartenenza alla classe negativa "not-opened" sono stati effettuati i seguenti cambiamenti, sempre lasciando invariate le altre variabili:
+- da una AGE_FID pari a 297 stata impostata una AGE_FID pari a 150 e, con una probabilità del 51% il cliente aprirà la email;
+- da un OPER_RATE pari a 0.25 viene aumentato a 0.73 e, con una probabilità del 79%, il cliente aprirà la mail;
+- da un CLICK_RATE pari a zero viene aumentato di 0.5 e, con una probabilità del 52%, il cliente aprirà la mail;
+-  il giorno di invio della mail del cliente era il marted�, testando il modello su tutti gli, il cliente continua a non aprire la mail, eccetto per quanto riguarda le mail inviate di domenica.
+
+Tramite questo test è stato possibile avere una conferma empirica dell'importanza delle precedenti variabili nel discriminare se un cliente apre o meno l'email. Infatti, anche cambiando una sola delle precedenti, a parità di tutte le altre, la classe di appartenenza cambia.
+
+E' stato quindi possibile trarre le seguenti conclusioni:  
+
+se per limiti di budget la campagna marketing deve essere limitata ad un gruppo ristretto di clienti, allora sarebbe opportuno inviare mail mirate agli utenti che hanno un click e open rate alto e che hanno attivato da non molti giorni il fidelity program. Si è visto, infatti, che questa tipologia di clienti apre con molto proabilità la mail e continuerebbe a farlo.
+Se invece l'obiettivo della campagna marketing è aumentare il numero di clienti che aprono la mail, allora sarebbe opportuno concentrarsi su quei consumatori che hanno attivato il fidelity programme da più tempo e con un click e open rate basso. Questo potrebbe essere effettuato tramite l'invio di sconti personalizzati in modo da invogliare il cliente ad aprire la mail e tornare ad essere "attivo".
+
+Per quanto riguarda i giorni della settimana, si potrebbe pensare di non inviare le mail tutte nello stesso giorno ma differenziando in base alle caratteristiche del cliente. Ad esempio, l'individuo utilizzato come test, apre solamente le mail inviate durante la domenica.
+
+
+### MIGLIORAMENTI E SVILUPPI FUTURI
+
+Il dataset in questione è risultato molto pesante e questo ha penalizzato e impedito l'utilizzo di algoritmi che risultavano computazionalmente troppo dispendiosi.
+
+Una possibile soluzione potrebbe essere quella di effettuare un'analisi di clustering dei clienti in modo tale da suddividere il dataset in più subset per effettuare algoritmi più sofisticati e migliorare e affinare i risultati.
+
+
+
+# PROPENSITY TO CHURN MODEL
+
+**Business question**
+Il secondo modello di business sviluppato è il *propensity to churn model* che ha l'obiettivo di assegnare a ciascun cliente la sua probabilità di abbandono, in modo da implementare specifiche azioni di marketing correttive finalizzate a trattenere i clienti con più alto valore. 
+
+Lo studio, tramite l'applicazione di algoritmi di machine learning, indaga i possibili comportamenti che portano il cliente ad abbandonare la compagnia per valutare se effettuare possibili campagne di marketing per "trattenere" i clienti. 
+
+Per svolgere questo tipo di problema è stato impostato un modello di classificazione in cui la variabile target consiste in un attributo binario che indica se il cliente è un churner o meno. 
+
+Per "etichettare" il cliente come churner, è stato necessario definire un time span dopo il quale, secondo le analisi, il consumatore ha un'alta di probabilità di non effettuare più acquisti. 
+
+
+### DATA PREPARATION
+
+Di seguito viene riportata una prima fase di preprocessing dei dati grezzi e, successivamente, una fase di data transformation per definire la variabile target. 
+Inoltre, verranno modificate alcune variabili esistenti e saranno create delle nuove feature.
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+**Set up e Data imput**
+
+```{r}
+library(dplyr)
+library(magrittr)
+library(ggplot2)
+
+data_path <- "Laboratorio/"
+df_7_tic <- read.csv2(paste0(data_path,"raw_7_tic.csv") , na.strings = c("NA", ""))
+```
+
+**Preprocessing**
+
+```{r}
+df_7_tic <- df_7_tic %>% 
+  dplyr::mutate(DATE = as.Date(DATETIME)) %>% 
+  dplyr::select(-DATETIME)  
+```
+
+```{r}
+df_7_tic <- df_7_tic %>% 
+  mutate(ID_CLI = as.factor(ID_CLI))
+```
+
+Numero di clienti diversi
+```{r}
+num_client <- df_7_tic %>% 
+  dplyr::summarise(client = n_distinct(ID_CLI))
+```
+
+Spesa giornaliera per ogni cliente:
+```{r}
+spend_per_day <- df_7_tic %>% 
+  dplyr::mutate(ID_CLI = as.factor(ID_CLI)) %>% 
+  dplyr::group_by(ID_CLI, ID_SCONTRINO, DATE) %>% 
+  dplyr::summarise(SPEND = sum(IMPORTO_LORDO)) %>%
+  dplyr::ungroup() %>% 
+  dplyr::filter(SPEND > 0)
+```
+
+Viene calcolato per ogni cliente il tempo intercorso tra gli acquisti
+```{r}
+time_between <- spend_per_day %>% 
+  dplyr::arrange(ID_CLI, DATE) %>% 
+  dplyr::group_by(ID_CLI) %>% 
+  dplyr::mutate(dt = as.numeric(DATE - lag(DATE), unit=  'days')) %>%
+  dplyr::ungroup() %>% 
+  na.omit()
+```
+
+Numero di transazioni effettuate dal cliente
+```{r}
+Ntrans <- spend_per_day %>% 
+  dplyr::group_by(ID_CLI) %>% 
+  dplyr::summarise(N = n()) %>% 
+  dplyr::filter(N > 1) %>% 
+  dplyr::arrange(N)
+```
+
+Numero di clienti che hanno effettuato quel determinato numero di transazioni
+```{r}
+Ntrans2 <- Ntrans %>% 
+  dplyr::group_by(N) %>% 
+  dplyr::mutate(n_clienti = n_distinct(ID_CLI)) %>% 
+  dplyr::filter(row_number(N) == 1) %>% 
+  dplyr::arrange(N) %>% 
+  dplyr::select(-ID_CLI)
+```
+
+
+Giunti a questo punto, viene calcolato il percentile di ordine 9 degli intervalli di tempo che intercorrono tra le gli acquisti di ogni cliente (dt). Il valore così trovato, espresso in giorni, indica che 9 volte su 10 il cliente effettua un acquisto entro tot giorni.
+Quindi un cliente viene considerato churner se, rispetto al 30 aprile 2019 (ovvero l'ultimo giorno in cui si ha la disponibilità dei dati) i giorni per cui egli non ha effettuato un acquisto sono maggiori rispetto al suo percentile.
+
+Per definire se un cliente è churner o no sono stati considerati soltanto i clienti ritenuti non occasionali, ovvero coloro che hanno effettuato un numero di transazioni pari almeno a 5.
+
+Nel calcolo del percentile viene utilizzato un approccio non parametrico.
+Nello specifico verrà presa in considerazione una distribuzione di tipo ECDF (Empirical Cumulative Distribution Function), in grado di approssimare il quantile della distribuzione degli acquisti del cliente.
+
+```{r}
+get_quantile <- function(x,a = 0.9){
+  if(a>1|a<0){
+    print('Check your quantile')
+  }
+  X <- sort(x)
+  e_cdf <- 1:length(X) / length(X)
+  aprx = approx(e_cdf, X, xout = c(0.9))
+  return(aprx$y)
+}
+
+percentiles <- time_between %>% 
+  dplyr::inner_join(Ntrans) %>% 
+  dplyr::filter(N>4) %>% 
+  dplyr::group_by(ID_CLI) %>% 
+  dplyr::summarise(percentile.90= get_quantile(dt, 0.9)) %>% 
+  dplyr::arrange(percentile.90)
+```
+
+Si arrotonda il percentile e si fissa un giorno come soglia di tolleranza.
+```{r}
+percentiles <- percentiles %>% 
+  dplyr::mutate(percentile_round = round(percentile.90) + 1)
+```
+
+Si fissa quindi, per ogni cliente, la data in cui è stato effettuato l'ultimo acquisto
+```{r}
+last_purchase <- time_between %>% 
+  dplyr::group_by(ID_CLI) %>% 
+  dplyr::filter(DATE == max(DATE)) %>% 
+  dplyr::distinct(ID_CLI, .keep_all = T)
+```
+
+Si ordina il dataset contente le informazioni di interesse sui clienti, in base alla data.
+```{r}
+df_7_tic <- df_7_tic %>% 
+  dplyr::arrange(DATE)
+```
+
+Viene identificata come last_day l'ultima data per cui sono disponibili le rilevazioni sul dataset e come days_no_purc i giorni intercorsi tra l'ultimo acquisto e questa data.
+```{r}
+last_purchase <- last_purchase %>% 
+  dplyr::mutate(last_day = as.Date("2019-04-30")) %>% 
+  dplyr::mutate(days_no_purc = last_day - DATE)
+```
+
+Si uniscono quindi i dataset in cui è stato costruito il percentile ed il dataset in cui sono presenti le variabili utili alla definizione dei clienti churner (in particolare days_no_churn).
+```{r}
+last_purc_churn <- dplyr::left_join(last_purchase, percentiles, by = "ID_CLI")
+```
+
+
+Si costruisce, in via definitiva, la variabile dipendente così come è stata definita nei passi precedenti. 
+Il valore della variabile è pari ad 1 se il cliente è churner, 0 altrimenti.
+
+Un cliente sarà churner se il numero di giorni percorsi dal suo ultimo acquisto sono maggiori di quanto è solito fare 9 volte su 10.
+Ad esempio se un cliente non ha acquistato per 70 giorni, ma 9 volte su 10 acquista entro 50 giorni, sarà considerato churner.
+
+```{r}
+last_purc_churn <- last_purc_churn %>% 
+  na.omit() %>% 
+  dplyr::mutate(churn = ifelse(days_no_purc > percentile_round, 1, 0))
+```
+
+Giunti a questo punto last_purc_churn è il dataset in cui è stata definita la variabile target.
+
+Si concentra ora l'analisi sul dataset iniziale df_7_tic, per riuscire ad ottenere alcune indicazioni e caratteristiche dei clienti, che potrebbero tornare utili nella fase di Modelling.
+In particolare sono create 3 variabili:
+
+1) attitudine_sconto: tendenza del cliente ad acquistare prodotti per cui è attivo uno sconto. Questa variabile è data dalla percentuale del rapporto tra gli articoli acquistati in saldo durante tutto l'anno sul totale degli articoli acquistati.
+
+2) perc_risparmio: percentuale di risparmio. Questa variabile è data dalla percentuale del rapporto tra il totale degli euro risparmiati sul totale della spesa effettuata durante tutto l'anno.
+
+3) perc_refound: percentuale di reso. Questa variabile è data dalla percentuale del rapporto tra il totale degli articoli restituiti e sul totale degli articoli acquistati (e restituiti).
+
+```{r}
+control_direction <- df_7_tic %>% 
+  dplyr::mutate(ID_CLI = as.factor(ID_CLI)) %>% 
+  dplyr::group_by(ID_CLI) %>% 
+  dplyr::summarise(perc_refound = (sum(DIREZIONE == -1) / length(DIREZIONE)) * 100, perc_risparmio = (sum(SCONTO) / sum(IMPORTO_LORDO))*100, attitudine_sconto = sum((SCONTO != 0)/ length(SCONTO)) *100) %>% 
+  ungroup()
+``` 
+
+
+Numero di clienti churner e non churner
+```{r}
+table(last_purc_churn$churn)
+```
+
+Dalla tabella di frequenza della variabile target, si evince che le due classi identificate appaiono equamente bilanciate.
+
+
+Si crea un file csv del dataset costruito fin qui, in modo tale da poterlo successivamente leggere, senza passare nuovamente tutte le fasi precedenti.
+```{r}
+#write.csv(last_purc_churn, paste0(data_path, "churner.csv"))
+```
+
+
+Si legge il file prima creato
+```{r}
+#df_churn <- read.csv(paste0(data_path, "churner.csv"))
+df_churn <- last_purc_churn
+```
+
+Si calcola il totale della spesa e la media della spesa di ogni cliente
+```{r}
+total_spend <- spend_per_day %>% 
+  group_by(ID_CLI) %>% 
+  summarise(total_spend = sum(SPEND), mean_spend = mean(SPEND))
+```
+
+Modifica del tipo di ID_CLI, utile per dopo.
+```{r}
+df_churn$ID_CLI <- as.factor(df_churn$ID_CLI)
+```
+
+Fusione tra il dataset letto e quello contenente i dati sulla spesa (spesa totale e media per cliente).
+```{r}
+df_churn <- inner_join(df_churn, total_spend) %>% 
+  dplyr::select(-SPEND)
+```
+
+**Data integration**
+
+Inizia ora la fase di integrazione dei vari dataset a disposizione.
+L'obiettivo e integrare tutte le caratteristiche che potrebbero tornare utili per identificare e poi prevedere un cliente churner.
+Le variabile giudicate ridondanti o non utili all'analisi, saranno eliminate durante ogni join.
+
+Fusione con il primo dataset con le informazioni sul cliente (df_1_cli_fid_clean)
+```{r}
+df_1_cli_fid_clean <- df_1_cli_fid_clean %>% 
+  dplyr::mutate(ID_CLI = as.factor(ID_CLI))
+
+df_churn_cli_1 <- inner_join(df_churn, df_1_cli_fid_clean, by = "ID_CLI") %>% 
+  dplyr::select(-c(ID_FID, FIRST_ID_NEG, FIRST_DT_ACTIVE)) %>% 
+  dplyr::mutate(date_last_pur = DATE) %>% 
+  dplyr::select(-DATE)
+```
+
+Fusione con il dataset 2, dopo aver fuso il dataset 2 con le informazioni contenute nel 3.
+```{r}
+df_2_cli_account_clean <- df_2_cli_account_clean %>% 
+  mutate(ID_CLI = as.factor(ID_CLI))
+
+df_2_cli_account_clean <- inner_join(df_2_cli_account_clean, df_3_cli_address_clean, by = "ID_ADDRESS")
+
+
+df_churn_cli_2 <- inner_join(df_churn_cli_1, df_2_cli_account_clean, by= "ID_CLI") %>% 
+  dplyr::select(-c(ID_ADDRESS, EMAIL_PROVIDER_CLEAN))
+```
+
+Fusione con il dataset 4.
+```{r}
+df_4_cli_privacy_clean <- df_4_cli_privacy_clean %>% 
+  mutate(ID_CLI = as.factor(ID_CLI))
+
+df_churn_cli_4 <- inner_join(df_churn_cli_2, df_4_cli_privacy_clean, by = "ID_CLI") 
+```
+
+
+Modifica di alcune variabili
+```{r}
+df_churn_cli_4 <- df_churn_cli_4 %>%
+  mutate(W_PHONE = as.factor(W_PHONE))
+
+df_churn_cli_4 <- df_churn_cli_4 %>%
+  mutate(TYP_CLI_ACCOUNT = as.factor(TYP_CLI_ACCOUNT))
+
+df_churn_cli_4 <- df_churn_cli_4 %>%
+  mutate(W_PHONE = fct_explicit_na(W_PHONE, "0")) %>%
+  mutate(TYP_JOB = fct_explicit_na(TYP_JOB, "(missing)"))
+```
+
+Modifica di alcune variabili ed eliminazione di altre.
+Inoltre fusione del dataset ottenuto da tutte le join eseguite in precedenza, con il dataset avente le 3 variabili create ex novo.
+(perc_refound, perc_risparmio, attitudine_sconto)
+```{r}
+data_churn_all <- df_churn_cli_4
+
+data_churn_all <- data_churn_all %>%  
+  mutate(ID_CLI = as.factor(ID_CLI))
+
+data_churn_all <- data_churn_all %>% 
+  mutate(churn = as.factor(churn)) %>%
+  mutate(CAP = as.factor(CAP)) %>% 
+  dplyr::select(-ID_SCONTRINO,-last_day,-percentile.90,-percentile_round,-total_spend,-date_last_pur)
+
+data_churn_all <- left_join(data_churn_all, control_direction, by= "ID_CLI")
+```
+
+Di nuovo, come prima, viene scritto il file per evitare di partire ogni volta dal principio.
+```{r}
+#write.csv(data_churn_all, paste0(data_path, "data_churn_all.csv"))
+```
+
+```{r}
+#data_churn_all <- read.csv(paste0(data_path, "data_churn_all.csv"))
+```
+
+
+Si passa quindi alla fase di data modeling.
+
+**MODELING**
+
+**SETUP**
+```{r}
+library(caret)
+library(glmnet)
+library(e1071)
+library(car)
+library(MASS)
+library(arm)
+library(MCMCpack)
+library(pROC)
+library(plotROC)
+library(randomForest)
+
+data_path <- "Laboratorio/"
+```
+
+**READ DATA**
+```{r}
+
+data_churn_all <- data_churn_all %>% 
+  dplyr::mutate(NUM_FIDs = as.factor(NUM_FIDs)
+         , W_PHONE = as.factor(W_PHONE)
+         , TYP_CLI_ACCOUNT = as.factor(TYP_CLI_ACCOUNT)
+         , churn = as.factor(churn)
+         , TYP_CLI_FID = as.factor(TYP_CLI_FID)
+         , STATUS_FID = as.factor(STATUS_FID)
+         , FLAG_PRIVACY_1 = as.factor(FLAG_PRIVACY_1)
+         , FLAG_PRIVACY_2 = as.factor(FLAG_PRIVACY_2)
+         , FLAG_DIRECT_MKT = as.factor(FLAG_DIRECT_MKT))
+```
+
+
+Letti i dati precedentemente processati ed effettuati i dovuti accorgimenti, si passa alla fase di data modelling.
+L'obiettivo è scoprire ed evidenziare le caratteristiche principali che rendono portano un cliente a diventare Churner, per poi riuscire a prevedere e contrastare un eventuale Churn da parte di altri consumatori.
+Abbiamo quindi una variabile target: Churn (1 se il cliente è Churner, 0 altrimenti) e diverse variabili esplicative.
+Si tratta di un problema di Supervised learning.
+Si decide, quindi, come prima ipotesi, di stimare un modello di regressione logistica attraverso la funzione glm. 
+Dal dataset letto in partenza vengono rimosse le variabili considerate ridondanti, non utili allo scopo o nelle quali è presente una quantità molto elevata di missing.
+Training e test set vengono separati attribuendo rispettivamente il 75% delle osservazioni al primo e il restante 25% al secondo.
+
+**LOGISTIC REGRESSION**
+```{r}
+data_logistic <- data_churn_all %>% 
+  dplyr::select(-c(PRV, CAP, REGION, ID_CLI, ID_NEG, TYP_JOB)) %>% 
+  dplyr::mutate(DT_ACTIVE = as.Date(DT_ACTIVE))
+
+set.seed(12345)
+training_logistic <- data_logistic$churn %>% 
+  createDataPartition(p = 0.75, list = F)
+
+train_logistic <- data_logistic[training_logistic,]
+test_logistic <- data_logistic[-training_logistic,]
+ 
+mod_logistic <- glm(churn ~., family = "binomial", data = train_logistic)
+```
+
+```{r}
+summary(mod_logistic)
+```
+
+
+
+**Previsioni sul test set**
+```{r}
+probabilities_logistic <- predict(mod_logistic, test_logistic, type="response")
+predicted_logistic = ifelse(probabilities_logistic > 0.5, 1, 0)
+observed_classes <- test_logistic$churn
+mean(predicted_logistic == observed_classes)
+```
+
+Vengono quindi indagati ulteriori caratteristiche del modello utilizzato.
+In particolare si analizza la variance inflation function per indagare eventuale collinearità delle feature utilizzate nel modello stimato.
+
+**Ulteriori osservazioni**
+```{r}
+vif(mod_logistic)
+```
+
+Come possiamo vedere dalla funzione VIF, la quale restituisce 
+il grado di multicollinearità delle variabili inserite nel modello,
+le feature TYP_CLI_ACCOUNT e COD_FID sono collineari.
+Detto ciò, risulta utile considerare soltanto una delle due presenti.
+Viene eliminata per tale motivo la prima delle due e si ristima il modello.
+
+VIFj = 1/1 - Rj
+
+
+**NUOVO MODELLO DI REGRESSIONE LOGISTICA**
+```{r}
+data_logistic <- data_churn_all %>% 
+  dplyr::select(-c(PRV, CAP, REGION, ID_CLI, ID_NEG, TYP_JOB, TYP_CLI_ACCOUNT)) %>% 
+  dplyr::mutate(DT_ACTIVE = as.Date(DT_ACTIVE))
+
+set.seed(12345)
+training_logistic <- data_logistic$churn %>% 
+  createDataPartition(p = 0.75, list = F)
+
+train_logistic <- data_logistic[training_logistic,]
+test_logistic <- data_logistic[-training_logistic,]
+
+mod_logistic <- glm(churn ~., family = "binomial", data = train_logistic)
+```
+
+```{r}
+summary(mod_logistic)
+```
+
+
+
+**NUOVE PREVISIONI SUL TEST SET**
+```{r}
+probabilities_logistic <- predict(mod_logistic, test_logistic, type="response")
+predicted_logistic = ifelse(probabilities_logistic > 0.5, 1, 0)
+observed_classes <- test_logistic$churn
+mean(predicted_logistic == observed_classes)
+```
+
+
+**VARIANCE INFLATION FUNCTION**
+```{r}
+vif(mod_logistic)
+```
+
+
+Come mostrato dai risultati, la media delle volte in cui i risultati delle previsioni risultano uguali ai valori osservati della variabile target resta uguale (pari circa al 90%).
+Inoltre viene risolta la collinearità delle variabili esplicative, come visto dalla funzione VIF.
+
+
+Si decide a questo punto di indagare la possibilità di rimozione di alcune variabili dal modello.
+Nello specifico viene applicata la logica di selezione stepwise in entrambe le direzioni possibili (forward and backword).
+Il risultato proveniente da questa tecnica riesce ad indicare il modello per cui risulta minimo l'Akaike Information Criterion,
+metodo di valutazione in grado di fornire la qualità di stima di un modello, considerando congiuntamente la bontà di adattamento e la complessità dello stesso.
+
+```{r}
+step.model <- stepAIC(mod_logistic, direction = "both", 
+                      trace = FALSE)
+step.model
+```
+
+Si procede quindi nel definire il modello di regressione logistica facendo affidamento su quanto emerso dalla stepwise model selection
+
+**STEPWISE MODEL**
+```{r}
+logistic_step <- glm(formula = churn ~ dt + days_no_purc + mean_spend + COD_FID + DT_ACTIVE + FLAG_PRIVACY_1 + perc_refound + attitudine_sconto, family = "binomial", data = train_logistic)
+```
+
+```{r}
+summary(logistic_step)
+```
+
+Com'è possibile notare dai risultati, il livello di AIC è sceso.
+Inoltre tutte le variabili inserite nella stima, presentano un coefficiente significativo.
+
+**NUOVE PREVISIONI SUL TEST SET**
+```{r}
+probabilities_logistic_step <- predict(logistic_step, test_logistic, type="response")
+predicted_logistic_step = ifelse(probabilities_logistic > 0.5, 1, 0)
+observed_classes <- test_logistic$churn
+mean(predicted_logistic_step == observed_classes)
+```
+
+I risultati rimangono ottimi e viene ridotta notevolmente la complessità del modello utilizzato.
+
+
+Per testare in modo consistente la bontà delle previsioni del modello, vengono calcolate tre metriche che indagano la capacità dell'algoritmo di assegnare in modo corretto una osservazione come churner o non churner quando realmente questa appartiene a le due categorie:
+F1 measure, Precision and Recall:
+
+```{r}
+caret::F_meas(data = as.factor(predicted_logistic_step), reference = test_logistic$churn)
+caret::precision(data = as.factor(predicted_logistic_step), reference = test_logistic$churn)
+caret::recall(data = as.factor(predicted_logistic_step), reference = test_logistic$churn)
+```
+
+Le tre metriche calcolate danno ottimi risultati.
+
+Si decide ora di passare ad un tipo di algoritmo diverso.
+Si procede aggiungendo una penalità per controllare le proprietà dei coefficienti di regressione, andando oltre a quanto la mera funzione di verosimiglianza permette.
+
+
+Viene infatti cercata l'ottimizzazione della verosimiglianza e della penalità piuttosto che tentare di massimizzare solamente la prima.
+
+Si parla in questo caso di Penalized logistic regression.
+Questa impone una penalità al modello logistico quando questo presenta troppe variabili.
+Questo metodo, chiamato anche regolarizzazione, permette di portare a zero il valore assoluto dei coefficienti delle variabili meno costributive per il modello stimato. 
+
+
+I modelli di regressione penalizzata più comuni sono:
+- Ridge Regression
+- Lasso Regression
+- Elastic Net Regression
+
+
+Si decide di applicare la regressione con penalità di tipo LASSO, la quale permette di forzare il valore assoluto dei coefficienti meno significativi a 0.
+
+**REGRESSIONE LASSO**
+```{r}
+data_lasso <- data_logistic
+set.seed(12345)
+training <- data_lasso$churn %>% 
+  createDataPartition(p = 0.75, list = F)
+
+train_lasso <- data_lasso[training,]
+test_lasso <- data_lasso[-training,]
+```
+
+```{r}
+x <- model.matrix(churn~., train_lasso)[,-1]
+y <- train_lasso$churn
+```
+
+```{r}
+set.seed(12345)
+cv.lasso <- cv.glmnet(x, y, alpha = 1, family = "binomial")
+model_lasso <- glmnet(x, y, alpha = 1, family = "binomial",
+                lambda = cv.lasso$lambda.min)
+coef(model_lasso)
+```
+
+L'unica variabile completamente priva di valore aggiunto per spiegare la variabile target d'interesse, risulta essere FLAG_DIRECT_MKT 
+
+**PREVISIONI LASSO**
+```{r}
+x.test <- model.matrix(churn ~., test_lasso)[,-1]
+probabilities <- model_lasso %>% predict(newx = x.test)
+predicted.classes <- ifelse(probabilities > 0.5, 1, 0)
+observed.classes <- test_lasso$churn
+mean(predicted.classes == observed.classes)
+```
+
+Si cerca ora di ottimizzare i parametri riguardanti la specificazione del modello, in particolare, viene indagato il tipo di parametro lambda che permette di ottenere il modello più accurato:
+```{r}
+cv.lasso$lambda.min
+```
+
+```{r}
+coef(cv.lasso, cv.lasso$lambda.min)
+```
+
+
+Ed anche quello che dà prova del modello più semplice
+```{r}
+cv.lasso$lambda.1se
+```
+```{r}
+coef(cv.lasso, cv.lasso$lambda.1se)
+```
+
+
+Quest'ultimo parametro pare essere troppo restringente; vengono infatti posti pari a zero anche i coefficienti delle variabili considerate nella stima del modello di regressione logistica iniziale.
+Si stima, ad ogni modo, il modello di regressione logistica penalizzata considerando entrambi i lambda menzionati in precedenza.
+
+
+Con Lambda min
+```{r}
+model_lasso <- glmnet(x, y, alpha = 1, family = "binomial",
+                      lambda = cv.lasso$lambda.min)
+x.test <- model.matrix(churn ~., test_lasso)[,-1]
+probabilities <- model_lasso %>% predict(newx = x.test)
+predicted.classes <- ifelse(probabilities > 0.5, 1, 0)
+observed.classes <- test_lasso$churn
+mean(predicted.classes == observed.classes)
+```
+
+Con lambda 1se
+```{r}
+model_lasso_1se <- glmnet(x, y, alpha = 1, family = "binomial",
+                      lambda = cv.lasso$lambda.1se)
+x.test <- model.matrix(churn ~., test_lasso)[,-1]
+probabilities <- model_lasso_1se %>% predict(newx = x.test)
+predicted.classes <- ifelse(probabilities > 0.5, 1, 0)
+observed.classes <- test_lasso$churn
+mean(predicted.classes == observed.classes)
+```
+
+I risultati sono molto interessanti.
+Il lambda 1se permette di semplificare molto la stima del modello e, pur eliminando diverse variabili esplicative, restituisce un'accuratezza delle previsioni quasi identica a quella ottenuta con Lambda min. 
+Si potrebbe optare quindi per tenere in considerazione l'ultimo degli algoritmi sviluppati.
+Risultati molto simili, ma semplicità maggiore.
+
+
+Si prova ora a considerare un tipo di regressione logistica basata sulla statistica Bayesiana.
+
+```{r}
+model_bayesian_glm <- bayesglm(churn ~., family = "binomial", data = train_logistic, prior.df = Inf, prior.scale = Inf)
+summary(model_bayesian_glm)
+```
+
+L'output del modello coincide con quanto emerso dalla regressione logistica tradizionale. In verità questo si presenta come risultato più probabile. Infatti, al crescere della numerosità del campione, i risultati dei due modelli menzionati, dovrebbero combaciare (come avviene realmente).
+
+
+
+Si sceglie a questo punto di utilizzare un albero decisionale per provare ad indagare la relazione tra le variabili e la loro importanza.
+Il fine è poi utilizzare i risultati emersi dall'albero per stimare una rete neurale di tipo NNET.
+```{r}
+data_decision <- data_logistic
+
+set.seed(12345)
+levels(data_decision$churn) <- c("not_churner", "churner")
+levels(data_decision$TYP_CLI_FID) <- c("not_main", "main_account")
+levels(data_decision$STATUS_FID) <- c("not_active", "active_account")
+levels(data_decision$NUM_FIDs) <- c("one", "two")
+levels(data_decision$W_PHONE) <- c("not_given", "given")
+levels(data_decision$FLAG_PRIVACY_1) <- c("not_flag1", "flag1")
+levels(data_decision$FLAG_PRIVACY_2) <- c("not_flag2", "flag2")
+levels(data_decision$FLAG_DIRECT_MKT) <- c("not_flagMKT", "flagMKT")
+
+set.seed(12345)
+training_decision <- data_decision$churn %>%
+  createDataPartition(p = 0.75, list = F)
+
+train_decision <- data_decision[training_decision,]
+test_decision <- data_decision[-training_decision,]
+
+metric <- "ROC"
+Ctrl <- trainControl(method = "cv" , number=3, classProbs = TRUE,
+summaryFunction = twoClassSummary)
+rpartTune <- train(churn~ ., data = train_decision, method = "rpart", tuneLength = 10, trControl = Ctrl, metric=metric)
+rpartTune
+```
+Il tuning restituisce in cima un parametro cp grazie al quale risulta possibile massimizzare il risultato in termini di ROC, metrica impostata per questo algoritmo.
+
+```{r}
+Vimportance <- varImp(rpartTune)
+plot(Vimportance)
+```
+
+Dal grafico soprastante è possibile notare il ranking delle variabili ordinate per importanza.
+
+Si effettua di nuovo l'albero decisionale, settando, in questo caso, i parametri che dal tuning precedente risultavano essere migliori.
+
+```{r}
+set.seed(12345)
+Ctrl_save <- trainControl(method = "cv" , number=3, summaryFunction = twoClassSummary,
+classProbs = TRUE, savePredictions = TRUE)
+rpartTuneMy <- train(churn ~ ., data = train_decision, method = "rpart", tuneGrid=data.frame(cp=0.0009273791), trControl = Ctrl_save, metric=metric)
+```
+
+```{r}
+Vimportance_optm <- varImp(rpartTuneMy)
+plot(Vimportance_optm)
+```
+
+Viene verificato che l'ordine di importanza delle variabili rimane intatto.
+Si decide quindi di effettuare una feature selection sulla base delle indicazioni ottenute dal Decision tree.
+
+```{r}
+selected_training <- data_decision %>% 
+  dplyr::select(c(churn, days_no_purc, DT_ACTIVE, dt, mean_spend, COD_FID, FLAG_PRIVACY_2, W_PHONE, perc_refound, attitudine_sconto, perc_risparmio))
+
+set.seed(12345)
+training_selected_training <- selected_training$churn %>%
+  createDataPartition(p = 0.75, list = F)
+
+train_selected <- selected_training[training_selected_training,]
+test_selected <- selected_training[-training_selected_training,]
+```
+
+
+A questo punto, identificato il set di variabili migliori, si tenta di lanciare una rete neurale.
+Prima di ciò, tuttavia, si svolge un'analisi riguardo l'approccio migliore da utilizzare nella stima della stessa.
+Vengono, a tal proposito, testate una Principal Component Analysis, una Normalizzazione ed una Standardizzazione come metodi di preprocessing.
+Il metodo dei tre che restituirà i risultati migliori sarà quindi inserito nel preprocessing della Rete.
+
+**PCA**
+```{r}
+tunegrid <- expand.grid(size=c(1:5), decay = c(0.0002, 0.0003, 0.00001, 0.0001))
+nnetFit_defgridDR1 <- train(churn ~ .,
+                            method = "nnet",
+                            preProcess = 'pca',
+                            metric=metric,
+                            trControl=Ctrl, tuneGrid=tunegrid,
+                            trace = FALSE,
+                            data = train_selected,
+                            maxit = 100)
+getTrainPerf(nnetFit_defgridDR1)
+```
+
+```{r}
+nnetFit_defgridDR1$bestTune
+```
+
+
+
+**STANDARDIZZAZIONE**
+```{r}
+tunegrid <- expand.grid(size=c(1:5), decay = c(0.0002, 0.0003, 0.00001, 0.0001))
+nnetFit_defgridDR2 <- train(churn ~ .,
+                            method = "nnet",
+                            preProcess = c("center", "scale"),
+                            metric=metric,
+                            trControl=Ctrl, tuneGrid=tunegrid,
+                            trace = FALSE,
+                            data = train_selected,
+                            maxit = 100)
+getTrainPerf(nnetFit_defgridDR2)
+
+```
+
+```{r}
+nnetFit_defgridDR2$bestTune
+```
+
+
+
+**NORMALIZZAZIONE**
+```{r}
+tunegrid <- expand.grid(size=c(1:5), decay = c(0.0002, 0.0003, 0.00001, 0.0001))
+nnetFit_defgridDR3 <- train(churn ~ .,
+                            method = "nnet",
+                            preProcess = c("range"),
+                            metric=metric,
+                            trControl=Ctrl, tuneGrid=tunegrid,
+                            trace = FALSE,
+                            data = train_selected,
+                            maxit = 100)
+getTrainPerf(nnetFit_defgridDR3)
+```
+
+```{r}
+nnetFit_defgridDR3$bestTune
+```
+
+Il parametro in grado di restituire il livello maggiore di ROC, metrica utilizzata in quest'ambito, risulta essere la Standardizzazione. 
+Si procede quindi nell'implementazione della rete neurale, settendo i parametri emersi dalla Standardizzazione.
+
+```{r}
+set.seed(12345)
+tunegrid <- expand.grid(size=5, decay = 2e-04)
+nnetFit_final <- train(churn ~ .,
+                            method = "nnet",
+                            preProcess = c("center", "scale"),
+                            metric=metric,
+                            trControl=Ctrl_save, tuneGrid=tunegrid,
+                            trace = FALSE,
+                            data = train_selected,
+                            maxit = 100)
+getTrainPerf(nnetFit_final)
+```
+
+
+Anche i risultati della Rete Neurale sembrano essere ottimi.
+
+Si analizzano ora i risultati in termini di Precision, Recall, F Measure ed AIC delle 3 regressioni utilizzate:
+
+
+```{r}
+results_step_logistic <- cbind(caret::F_meas(data = as.factor(predicted_logistic_step), reference = test_logistic$churn), caret::precision(data = as.factor(predicted_logistic_step), reference = test_logistic$churn),
+caret::recall(data = as.factor(predicted_logistic_step), reference = test_logistic$churn), AIC(logistic_step))
+
+results_logistic <- cbind(caret::F_meas(data = as.factor(predicted_logistic), reference = test_logistic$churn), caret::precision(data = as.factor(predicted_logistic), reference = test_logistic$churn),
+caret::recall(data = as.factor(predicted_logistic), reference = test_logistic$churn), AIC(mod_logistic))
+
+
+results_lasso <- cbind(caret::F_meas(data = as.factor(predicted.classes), reference = test_lasso$churn), caret::precision(data = as.factor(predicted.classes), reference = test_lasso$churn),
+caret::recall(data = as.factor(predicted.classes), reference = test_lasso$churn), NA)
+
+results <- rbind(results_logistic, results_step_logistic, results_lasso)
+
+row.names(results) <- c("Logistic" ,"Logistic Stepwise", "LASSO")
+colnames(results) <- c("Fmeas","Precision", "Recall", "AIC")
+
+results
+```
+
+La migliore tra le 3 sembra essere la logistic Stepwise, ovvero la tradizionale Regressione Logistica, su cui però è stata svolta un metodo di selezione delle variabili di tipo Stepwise (Forward and Backword).
+Tra questo modello e la regressione su cui non è stata effettuata la tecnica precedente, in realtà, avviene un miglioramento solamente riguardo al Criterio di informazione basato sulla Verosimiglianza, ma non sulle previsioni.
+Per quanto riguarda, quindi, il futuro utilizzo di un modello od un altro, le considerazioni sulla capacità previsiva dei due modelli sono esattamente le stesse.
+Se però, si dovesse prediligere un approccio basato anche sulla semplicità, la strada da seguire è quella tracciata dalla Stepwise Logistic.
+
+
+
+A questo punto, i risultati ottenuti sono pienamente soddisfacenti.
+Si decide, però di provare a testare un modello di tipo Random Forest.
+Dati gli output precedenti, ci si aspetta una buona performance anche da questo algoritmo, per provare ad individuare e prevedere i possibili churner.
+Al fine di ottimizzare la stima del modello, viene effettuato, anche in questo caso, un tuning dei parametri.
+Una volta scovati i parametri migliori per ottenere i risultati ottimi, questi saranno inseriti nella stima del modello.
+
+```{r}
+customRF <- list(type = "Classification", library = "randomForest", loop = NULL)
+customRF$parameters <- data.frame(parameter = c("mtry", "ntree"),
+class = rep("numeric", 2),
+label = c("mtry", "ntree"))
+customRF$grid <- function(x, y, len = NULL, search = "grid") {}
+customRF$fit <- function(x, y, wts, param, lev, last, weights, classProbs, ...) {
+randomForest(x, y, mtry = param$mtry, ntree=param$ntree, ...)
+}
+customRF$predict <- function(modelFit, newdata, preProc = NULL, submodels = NULL)
+predict(modelFit, newdata)
+customRF$prob <- function(modelFit, newdata, preProc = NULL, submodels = NULL)
+predict(modelFit, newdata, type = "prob")
+customRF$sort <- function(x) x[order(x[,1]),]
+customRF$levels <- function(x) x$classes
+set.seed(123)
+tunegrid <- expand.grid(.mtry=c(4:9), .ntree=c(100,500))
+rpartTuneMyRf <- train(churn ~ ., data = train_decision, method = customRF,
+tuneGrid=tunegrid, trControl = Ctrl, metric=metric)
+rpartTuneMyRf
+```
+
+I valori finali per stimare la Random Forest saranno quindi quelli espressi dal tuning dei parametri.
+
+
+```{r}
+set.seed(12345)
+tunegrid <- expand.grid(.mtry=8, .ntree=500)
+rpartTuneMyRf_ok <- train(churn ~ ., data = train_decision, method = customRF,
+tuneGrid=tunegrid, trControl = Ctrl_save, metric=metric)
+rpartTuneMyRf_ok
+```
+
+
+Stimata la Random Forest viene adottato un criterio unico per confrontare tutti i modelli utilizzati in questa analisi.
+Il confronto ed il giudizio viene basato sulla metrica AUC, ovvero Area under the curve. Dove la curva è intesa in questo cosa come la ROC curve.
+
+```{r}
+roc_logistic <- roc(observed_classes ,probabilities_logistic)
+roc_logistic_step <- roc(observed_classes, probabilities_logistic_step)
+roc_LASSO <- roc(observed.classes, probabilities)
+result_predicted_nnet <- predict(nnetFit_final, test_selected, type = "prob")
+roc_nnet <- roc(test_selected$churn, result_predicted_nnet$churn)
+result_predicted_rf <- predict(rpartTuneMyRf_ok, test_decision, type = "prob")
+roc_rf <- roc(test_decision$churn, result_predicted_rf$churn)
+
+data_results <- as.data.frame(rbind(roc_LASSO$auc, roc_logistic$auc, roc_logistic_step$auc, roc_nnet$auc, roc_rf$auc))
+rownames(data_results) <- c("LASSO AUC", "Logistic AUC", "Step Logistic AUC", "NNET AUC", "Random Forest AUC")
+data_results
+```
+
+I risultati migliori provengono dall'ultimo dei modelli utilizzati, ovvero la Random Forest, su cui verrà svolto un approccio di tipo data driven.
+
+
+Per concludere, così come fatto per il primo obiettivo di business, si effettuano dei test con un individuo esempio.
+Lo scopo rimane quello di mostrare concretamente l'impotanza delle variabili.
+Si cerca di osservare se e come, al cambiare del valore di una sola delle esplicative risultate più importanti, può cambiare la classe di appartenenza dell'individuo in questione.
+
+Si utilizza a questo scopo un cliente presente nel test set. In questo caso, per semplicità verrà condotto l'esempio utilizzando il modello di regressione logistica step wise. 
+
+Analizziamo le variabili, in termini di influenza sul modello
+```{r}
+summary(logistic_step)
+```
+
+Modifichiamo ora il valore di alcune variabili risultate importanti, prendendo come riferimento un cliente giudicato churner.
+```{r}
+user_test1 <- test_logistic[1,] #cliente churner
+
+user_test1$mean_spend <- 300 #Cambia la spesa media
+user_test1$perc_refound <- 0 #percentuale di refound pari a 0
+user_test1$dt <- 150 #giorni tra gli acquisti
+user_test1$days_no_purch <- 150 #giorni dall'ultimo acquisto
+
+predict(logistic_step,user_test1[,] , type = "response")
+```
+
+Da questo breve esempio possiamo condurre alcune osservazioni:
+Il cliente preso come riferimento era chiaramente un churner.
+La sua spesa media era abbastanza bassa (61.9 euro), però i giorni trascorsi tra i suoi acquisti non erano elevati.
+
+Aumentando a 300 la spesa media degli acquisti, ma aumentando il periodo di passaggio solito tra le sue spese, il cliente è portato a diventare non churner.
+Questo risultato è molto interessante e può scaturire degli eventuali suggerimenti.
+Sarebbe, ad esempio, utile portare il cliente a spendere di più, aumentando gli euro spesi mediamente negli acquisti.
+Per attenuare questa spesa, potremmo lasciare che il cliente aspetti diverso tempo (più di quanto sia solito fare attualmente) prima di effettuare un altro acquisto; fermo restando però, due fattori chiave: la costanza tra le compere e una nulla percentuale di refound degli articoli (da incentivare).
+
+Si tenta un approccio simile al primo, ma diminuendo la media della spessa così come i giorni tra gli acquisti.
+```{r}
+user_test2 <- test_logistic[1,] #cliente churner
+
+user_test2$mean_spend <- 50 #Cambia la spesa media
+user_test2$perc_refound <- 0 #percentuale di refound pari a 0
+user_test2$dt <- 15 #giorni tra gli acquisti
+user_test2$days_no_purch <- 15 #giorni dall'ultimo acquisto
+
+predict(logistic_step,user_test2[,] , type = "response")
+```
+
+Ciò che emerge dai dati è particolarmente interessante.
+Prima dell'analisi, era facile credere che portare un cliente a rimanere nell'azienda fosse una questione di "frequenza" degli acquisti, e che fosse quindi necessario incentivare il cliente a comprare spesso, affinchè fosse costante la sua presenza.
+Dallo studio effettuato e dall'approccio di tipo data driven, però si evince il contrario.
+Si nota infatti come aumentando la spesa ma permettendo al cliente di tornare ad acquistare dopo parecchio tempo e mantenendo una percentuale di refound pari a 0, egli non sarà più churner.
+Al contrario, emerge che un cliente con una spesa media bassa, pur avendo una frequenza agli acquisti molto alta, è più portato ad abbandonare l'azienda, anche se la sua percentuale di refound è pari a 0.
+
+
+```{r}
+sink("sessionInfo.txt")
+sessionInfo()
+sink()
+writeLines(capture.output(sessionInfo()), "sessionInfo.txt")
+```
+
